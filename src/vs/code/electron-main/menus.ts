@@ -479,7 +479,7 @@ export class VSCodeMenu {
 			label: 'New File',
 			backgroundColor: '#7851A9',
 			click: () => {
-				console.log('new');
+				this.windowsService.sendToFocused('vscode:runAction', 'workbench.action.files.newUntitledFile');
 			}
 		});
 
@@ -487,7 +487,7 @@ export class VSCodeMenu {
 			label: 'Save',
 			backgroundColor: '#7851A9',
 			click: () => {
-				console.log('save');
+				this.windowsService.sendToFocused('vscode:runAction', 'workbench.action.files.save');
 			}
 		});
 
