@@ -328,7 +328,6 @@ export class VSCodeMenu {
 		const debugMenuItem = new MenuItem({ label: mnemonicLabel(nls.localize({ key: 'mDebug', comment: ['&& denotes a mnemonic'] }, "&&Debug")), submenu: debugMenu });
 		this.setDebugMenu(debugMenu);
 
-
 		// Mac: Window
 		let macWindowMenuItem: Electron.MenuItem;
 		if (isMacintosh) {
@@ -340,7 +339,7 @@ export class VSCodeMenu {
 		// Mac: Touchbar
 
 		if (isMacintosh) {
-			this.setTouchbar();
+			this.setInitialTouchbarState();
 		}
 
 		// Help
@@ -472,9 +471,17 @@ export class VSCodeMenu {
 		]).forEach(item => fileMenu.append(item));
 	}
 
-	private setTouchbar(): void {
+	private setInitialTouchbarState(): void {
 		// Need guidance to whether this is correct way to get window
 		const win = this.windowsService.getLastActiveWindow()._win;
+
+		const newBtn = new TouchBarButton({
+			label: 'New File',
+			backgroundColor: '#7851A9',
+			click: () => {
+				console.log('new');
+			}
+		});
 
 		const saveBtn = new TouchBarButton({
 			label: 'Save',
@@ -485,6 +492,7 @@ export class VSCodeMenu {
 		});
 
 		const touchBar = new TouchBar([
+			newBtn,
 			saveBtn
 		]);
 
