@@ -475,21 +475,8 @@ export class VSCodeMenu {
 		// Need guidance to whether this is correct way to get window
 		const win = this.windowsService.getLastActiveWindow()._win;
 
-		const newBtn = new TouchBarButton({
-			label: 'New File',
-			backgroundColor: '#7851A9',
-			click: () => {
-				this.windowsService.sendToFocused('vscode:runAction', 'workbench.action.files.newUntitledFile');
-			}
-		});
-
-		const saveBtn = new TouchBarButton({
-			label: 'Save',
-			backgroundColor: '#7851A9',
-			click: () => {
-				this.windowsService.sendToFocused('vscode:runAction', 'workbench.action.files.save');
-			}
-		});
+		const newBtn = this.createTouchbarButton('New File', 'workbench.action.files.newUntitledFile');
+		const saveBtn = this.createTouchbarButton('Save', 'workbench.action.files.save');
 
 		const touchBar = new TouchBar([
 			newBtn,
@@ -497,6 +484,16 @@ export class VSCodeMenu {
 		]);
 
 		win.setTouchBar(touchBar);
+	}
+
+	private createTouchbarButton(label, action): void {
+		return new TouchBarButton({
+			label: label,
+			backgroundColor: '#7851A9',
+			click: () => {
+				this.windowsService.sendToFocused('vscode:runAction', action);
+			}
+		});
 	}
 
 	private getPreferencesMenu(): Electron.MenuItem {
