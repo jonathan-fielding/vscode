@@ -987,4 +987,12 @@ if (platform.isLinux) {
 	};
 }
 
+if (platform.isMacintosh) {
+	editorConfiguration['properties']['touchbar.saveButton'] = {
+		'type': 'boolean',
+		'default': true,
+		'description': nls.localize('saveButton', "Controls if the touchbar shows a save button")
+	};
+}
+
 configurationRegistry.registerConfiguration(editorConfiguration);
