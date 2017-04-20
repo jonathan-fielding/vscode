@@ -988,10 +988,22 @@ if (platform.isLinux) {
 }
 
 if (platform.isMacintosh) {
+	editorConfiguration['properties']['touchbar.newButton'] = {
+		'type': 'boolean',
+		'default': true,
+		'description': nls.localize('newButton', "Controls if the touchbar shows a new file button")
+	};
+
 	editorConfiguration['properties']['touchbar.saveButton'] = {
 		'type': 'boolean',
 		'default': true,
 		'description': nls.localize('saveButton', "Controls if the touchbar shows a save button")
+	};
+
+	editorConfiguration['properties']['touchbar.actionBar'] = {
+		'type': 'boolean',
+		'default': true,
+		'description': nls.localize('actionBar', "Controls if the touchbar shows the action bar")
 	};
 }
 
