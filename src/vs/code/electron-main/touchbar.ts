@@ -49,24 +49,24 @@ export class VSCodeTouchbar {
 	private createActionbarSwitcher(selectedIndex = 0): void {
 		const segments = [
 			{
-				label: 'Explorer',
-				action: 'workbench.view.explorer'
+				action: 'workbench.view.explorer',
+				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/files-touchbar.png'
 			},
 			{
-				label: 'Search',
-				action: 'workbench.view.search'
+				action: 'workbench.view.search',
+				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/search-touchbar.png'
 			},
 			{
-				label: 'Git',
-				action: 'workbench.view.git'
+				action: 'workbench.view.git',
+				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/git-touchbar.png'
 			},
 			{
-				label: 'Debug',
-				action: 'workbench.view.debug'
+				action: 'workbench.view.debug',
+				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-touchbar.png'
 			},
 			{
-				label: 'Extensions',
-				action: 'workbench.view.extensions'
+				action: 'workbench.view.extensions',
+				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/extensions-touchbar.png'
 			}
 		];
 
