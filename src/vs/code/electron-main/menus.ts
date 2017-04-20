@@ -9,7 +9,7 @@ import * as nls from 'vs/nls';
 import { isMacintosh, isLinux, isWindows, language } from 'vs/base/common/platform';
 import * as arrays from 'vs/base/common/arrays';
 import { IEnvironmentService } from 'vs/platform/environment/common/environment';
-import { ipcMain as ipc, app, shell, dialog, Menu, MenuItem, TouchBar} from 'electron';
+import { ipcMain as ipc, app, shell, dialog, Menu, MenuItem} from 'electron';
 import { OpenContext } from 'vs/code/common/windows';
 import { IWindowsMainService } from 'vs/code/electron-main/windows';
 import { VSCodeWindow } from 'vs/code/electron-main/window';
@@ -24,8 +24,6 @@ import { IInstantiationService } from 'vs/platform/instantiation/common/instanti
 import Event, { Emitter, once } from 'vs/base/common/event';
 import { ConfigWatcher } from 'vs/base/node/config';
 import { IUserFriendlyKeybinding } from 'vs/platform/keybinding/common/keybinding';
-
-const {TouchBarButton} = TouchBar;
 
 interface IKeybinding {
 	id: string;
@@ -336,12 +334,6 @@ export class VSCodeMenu {
 			this.setMacWindowMenu(windowMenu);
 		}
 
-		// Mac: Touchbar
-
-		if (isMacintosh) {
-			this.setInitialTouchbarState();
-		}
-
 		// Help
 		const helpMenu = new Menu();
 		const helpMenuItem = new MenuItem({ label: mnemonicLabel(nls.localize({ key: 'mHelp', comment: ['&& denotes a mnemonic'] }, "&&Help")), submenu: helpMenu, role: 'help' });
@@ -469,31 +461,6 @@ export class VSCodeMenu {
 			!isMacintosh ? __separator__() : null,
 			!isMacintosh ? exit : null
 		]).forEach(item => fileMenu.append(item));
-	}
-
-	private setInitialTouchbarState(): void {
-		// Need guidance to whether this is correct way to get window
-		const win = this.windowsService.getLastActiveWindow()._win;
-
-		const newBtn = this.createTouchbarButton('New File', 'workbench.action.files.newUntitledFile');
-		const saveBtn = this.createTouchbarButton('Save', 'workbench.action.files.save');
-
-		const touchBar = new TouchBar([
-			newBtn,
-			saveBtn
-		]);
-
-		win.setTouchBar(touchBar);
-	}
-
-	private createTouchbarButton(label, action): void {
-		return new TouchBarButton({
-			label: label,
-			backgroundColor: '#7851A9',
-			click: () => {
-				this.windowsService.sendToFocused('vscode:runAction', action);
-			}
-		});
 	}
 
 	private getPreferencesMenu(): Electron.MenuItem {

@@ -94,6 +94,15 @@ export const EDITOR_SIDE_BY_SIDE_BORDER = registerColor('editorSideBySideBorder'
 }, nls.localize('editorSideBySideBorder', "Border color to separate the details from the master side for side by side editors."));
 
 
+// < --- Touchbar --- >
+
+export const TOUCHBAR_BUTTON_BACKGROUND = registerColor('touchbarButtonBackground', {
+	dark: '#68217A',
+	light: '#68217A',
+	hc: null
+}, nls.localize('touchbarButtonBackground', "Touchbar button background color. Touchbar buttons are shown on Macintosh computers that have a touchbar strip above the keyboard.."));
+
+
 // < --- Panels --- >
 
 export const PANEL_BACKGROUND = registerColor('panelBackground', {
