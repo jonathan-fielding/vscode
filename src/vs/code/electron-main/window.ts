@@ -21,7 +21,8 @@ import product from 'vs/platform/node/product';
 import { getCommonHTTPHeaders } from 'vs/platform/environment/node/http';
 import { IWindowSettings, MenuBarVisibility } from 'vs/platform/windows/common/windows';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
-
+import { VSCodeTouchbar } from 'vs/code/electron-main/touchbar';
+import { isMacintosh } from 'vs/base/common/platform';
 
 export interface IWindowState {
 	width?: number;
@@ -247,6 +248,11 @@ export class VSCodeWindow {
 			if (!this.win.isVisible()) {
 				this.win.show(); // to reduce flicker from the default window size to maximize, we only show after maximize
 			}
+		}
+
+		// Initalise a touchbar on the window
+		if (isMacintosh) {
+			this.touchbar = new VSCodeTouchbar(this);
 		}
 
 		this._lastFocusTime = Date.now(); // since we show directly, we need to set the last focus time too

@@ -1,20 +1,16 @@
 import { TouchBar } from 'electron';
-import { IWindowsMainService } from 'vs/code/electron-main/windows';
-import { isMacintosh } from 'vs/base/common/platform';
 const { TouchBarSegmentedControl, TouchBarButton, TouchBarSpacer } = TouchBar;
 
 export class VSCodeTouchbar {
 	constructor(
-		@IWindowsMainService private windowsService: IWindowsMainService
+		private window
 	) {
-		if (isMacintosh) {
-			this.setInitialTouchbarState();
-		}
+		this.setInitialTouchbarState();
 	}
 
 	private setInitialTouchbarState(): void {
 		// Need guidance to whether this is correct way to get window
-		const win = this.windowsService.getLastActiveWindow().win;
+		const win = this.window.win;
 
 		const newBtn = this.createTouchbarButton('New File', 'workbench.action.files.newUntitledFile');
 		const saveBtn = this.createTouchbarButton('Save', 'workbench.action.files.save');
@@ -35,7 +31,7 @@ export class VSCodeTouchbar {
 		return new TouchBarButton({
 			label: label,
 			click: () => {
-				this.windowsService.sendToFocused('vscode:runAction', action);
+				this.window.sendWhenReady('vscode:runAction', action);
 			}
 		});
 	}
@@ -47,6 +43,10 @@ export class VSCodeTouchbar {
 	}
 
 	private createActionbarSwitcher(selectedIndex = 0): void {
+		//const config = vscode.workspace.getConfiguration('touchbar');
+
+		//console.log(config);
+
 		const segments = [
 			{
 				action: 'workbench.view.explorer',
@@ -75,7 +75,7 @@ export class VSCodeTouchbar {
 			selectedIndex,
 			change: index => {
 				const selected = segments[index];
-				this.windowsService.sendToFocused('vscode:runAction', selected.action);
+				this.window.sendWhenReady('vscode:runAction', selected.action);
 			}
 		});
 	}

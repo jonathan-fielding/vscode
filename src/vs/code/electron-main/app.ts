@@ -14,7 +14,6 @@ import { WindowsChannel } from 'vs/platform/windows/common/windowsIpc';
 import { WindowsService } from 'vs/platform/windows/electron-main/windowsService';
 import { ILifecycleService } from 'vs/code/electron-main/lifecycle';
 import { VSCodeMenu } from 'vs/code/electron-main/menus';
-import { VSCodeTouchbar } from 'vs/code/electron-main/touchbar';
 import { getShellEnvironment } from 'vs/code/electron-main/shellEnv';
 import { IUpdateService } from 'vs/platform/update/common/update';
 import { UpdateChannel } from 'vs/platform/update/common/updateIpc';
@@ -261,9 +260,6 @@ export class VSCodeApplication {
 
 		// Install Menu
 		appInstantiationService.createInstance(VSCodeMenu);
-
-		// Install Touchbar
-		appInstantiationService.createInstance(VSCodeTouchbar);
 
 		// Jump List
 		this.windowsMainService.updateWindowsJumpList();
