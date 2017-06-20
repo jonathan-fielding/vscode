@@ -10,7 +10,7 @@ import Event, { Emitter } from 'vs/base/common/event';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
 import { IExtensionManagementService, DidUninstallExtensionEvent, IExtensionEnablementService } from 'vs/platform/extensionManagement/common/extensionManagement';
 import { adoptToGalleryExtensionId, getIdAndVersionFromLocalExtensionId } from 'vs/platform/extensionManagement/common/extensionManagementUtil';
-import { IWorkspaceContextService, IWorkspace } from 'vs/platform/workspace/common/workspace';
+import { IWorkspaceContextService, ILegacyWorkspace } from 'vs/platform/workspace/common/workspace';
 import { IStorageService, StorageScope } from 'vs/platform/storage/common/storage';
 import { IEnvironmentService } from 'vs/platform/environment/common/environment';
 
@@ -34,7 +34,7 @@ export class ExtensionEnablementService implements IExtensionEnablementService {
 		extensionManagementService.onDidUninstallExtension(this.onDidUninstallExtension, this, this.disposables);
 	}
 
-	private get workspace(): IWorkspace {
+	private get workspace(): ILegacyWorkspace {
 		return this.contextService.getWorkspace();
 	}
 
@@ -61,7 +61,7 @@ export class ExtensionEnablementService implements IExtensionEnablementService {
 
 	public setEnablement(identifier: string, enable: boolean, workspace: boolean = false): TPromise<boolean> {
 		if (workspace && !this.workspace) {
-			return TPromise.wrapError(localize('noWorkspace', "No workspace."));
+			return TPromise.wrapError<boolean>(localize('noWorkspace', "No workspace."));
 		}
 
 		if (this.environmentService.disableExtensions) {
@@ -124,7 +124,7 @@ export class ExtensionEnablementService implements IExtensionEnablementService {
 		}
 	}
 
-	private onDidUninstallExtension({id, error}: DidUninstallExtensionEvent): void {
+	private onDidUninstallExtension({ id, error }: DidUninstallExtensionEvent): void {
 		if (!error) {
 			id = getIdAndVersionFromLocalExtensionId(id).id;
 			if (id) {

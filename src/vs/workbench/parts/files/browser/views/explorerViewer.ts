@@ -22,10 +22,10 @@ import { isMacintosh, isLinux } from 'vs/base/common/platform';
 import glob = require('vs/base/common/glob');
 import { FileLabel, IFileLabelOptions } from 'vs/workbench/browser/labels';
 import { IDisposable } from 'vs/base/common/lifecycle';
-import { ContributableActionProvider } from 'vs/workbench/browser/actionBarRegistry';
+import { ContributableActionProvider } from 'vs/workbench/browser/actions';
 import { IFilesConfiguration } from 'vs/workbench/parts/files/common/files';
 import { ITextFileService } from 'vs/workbench/services/textfile/common/textfiles';
-import { IFileOperationResult, FileOperationResult, IFileService, isEqual, isEqualOrParent } from 'vs/platform/files/common/files';
+import { IFileOperationResult, FileOperationResult, IFileService } from 'vs/platform/files/common/files';
 import { ResourceMap } from 'vs/base/common/map';
 import { DuplicateFileAction, ImportFileAction, IEditableData, IFileViewletState } from 'vs/workbench/parts/files/browser/fileActions';
 import { IDataSource, ITree, IAccessibilityProvider, IRenderer, ContextMenuEvent, ISorter, IFilter, IDragAndDrop, IDragAndDropData, IDragOverReaction, DRAG_OVER_ACCEPT_BUBBLE_DOWN, DRAG_OVER_ACCEPT_BUBBLE_DOWN_COPY, DRAG_OVER_ACCEPT_BUBBLE_UP, DRAG_OVER_ACCEPT_BUBBLE_UP_COPY, DRAG_OVER_REJECT } from 'vs/base/parts/tree/browser/tree';
@@ -33,7 +33,6 @@ import { DesktopDragAndDropData, ExternalElementsDragAndDropData } from 'vs/base
 import { ClickBehavior, DefaultController } from 'vs/base/parts/tree/browser/treeDefaults';
 import { FileStat, NewStatPlaceholder } from 'vs/workbench/parts/files/common/explorerViewModel';
 import { DragMouseEvent, IMouseEvent } from 'vs/base/browser/mouseEvent';
-import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
 import { IWorkbenchEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { IPartService } from 'vs/workbench/services/part/common/partService';
 import { IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
@@ -44,7 +43,7 @@ import { IInstantiationService } from 'vs/platform/instantiation/common/instanti
 import { IMessageService, IConfirmation, Severity } from 'vs/platform/message/common/message';
 import { IProgressService } from 'vs/platform/progress/common/progress';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
-import { ResolvedKeybinding, KeyCode } from 'vs/base/common/keyCodes';
+import { KeyCode } from 'vs/base/common/keyCodes';
 import { IKeyboardEvent } from 'vs/base/browser/keyboardEvent';
 import { IMenuService, IMenu, MenuId } from 'vs/platform/actions/common/actions';
 import { fillInActions } from 'vs/platform/actions/browser/menuItemActionItem';
@@ -396,8 +395,7 @@ export class FileController extends DefaultController {
 		@ITelemetryService private telemetryService: ITelemetryService,
 		@IWorkspaceContextService private contextService: IWorkspaceContextService,
 		@IMenuService menuService: IMenuService,
-		@IContextKeyService contextKeyService: IContextKeyService,
-		@IKeybindingService private keybindingService: IKeybindingService
+		@IContextKeyService contextKeyService: IContextKeyService
 	) {
 		super({ clickBehavior: ClickBehavior.ON_MOUSE_UP /* do not change to not break DND */, keyboardSupport: false /* handled via IListService */ });
 
@@ -495,7 +493,6 @@ export class FileController extends DefaultController {
 				});
 			},
 			getActionItem: this.state.actionProvider.getActionItem.bind(this.state.actionProvider, tree, stat),
-			getKeyBinding: (a): ResolvedKeybinding => this.keybindingService.lookupKeybinding(a.id),
 			getActionsContext: (event) => {
 				return {
 					viewletState: this.state,
@@ -614,7 +611,7 @@ export class FileDragAndDrop implements IDragAndDrop {
 	}
 
 	private registerListeners(): void {
-		this.toDispose.push(this.configurationService.onDidUpdateConfiguration(e => this.onConfigurationUpdated(e.config)));
+		this.toDispose.push(this.configurationService.onDidUpdateConfiguration(e => this.onConfigurationUpdated(this.configurationService.getConfiguration<IFilesConfiguration>())));
 	}
 
 	private onConfigurationUpdated(config: IFilesConfiguration): void {
@@ -703,11 +700,11 @@ export class FileDragAndDrop implements IDragAndDrop {
 					return true; // Can not move anything onto itself
 				}
 
-				if (!isCopy && isEqual(paths.dirname(source.resource.fsPath), target.resource.fsPath)) {
+				if (!isCopy && paths.isEqual(paths.dirname(source.resource.fsPath), target.resource.fsPath)) {
 					return true; // Can not move a file to the same parent unless we copy
 				}
 
-				if (isEqualOrParent(target.resource.fsPath, source.resource.fsPath, !isLinux /* ignorecase */)) {
+				if (paths.isEqualOrParent(target.resource.fsPath, source.resource.fsPath, !isLinux /* ignorecase */)) {
 					return true; // Can not move a parent folder into one of its children
 				}
 
@@ -769,12 +766,12 @@ export class FileDragAndDrop implements IDragAndDrop {
 				};
 
 				// 1. check for dirty files that are being moved and backup to new target
-				const dirty = this.textFileService.getDirty().filter(d => isEqualOrParent(d.fsPath, source.resource.fsPath, !isLinux /* ignorecase */));
+				const dirty = this.textFileService.getDirty().filter(d => paths.isEqualOrParent(d.fsPath, source.resource.fsPath, !isLinux /* ignorecase */));
 				return TPromise.join(dirty.map(d => {
 					let moved: URI;
 
 					// If the dirty file itself got moved, just reparent it to the target folder
-					if (isEqual(source.resource.fsPath, d.fsPath)) {
+					if (paths.isEqual(source.resource.fsPath, d.fsPath)) {
 						moved = URI.file(paths.join(target.resource.fsPath, source.name));
 					}
 
@@ -807,12 +804,13 @@ export class FileDragAndDrop implements IDragAndDrop {
 								const confirm: IConfirmation = {
 									message: nls.localize('confirmOverwriteMessage', "'{0}' already exists in the destination folder. Do you want to replace it?", source.name),
 									detail: nls.localize('irreversible', "This action is irreversible!"),
-									primaryButton: nls.localize({ key: 'replaceButtonLabel', comment: ['&& denotes a mnemonic'] }, "&&Replace")
+									primaryButton: nls.localize({ key: 'replaceButtonLabel', comment: ['&& denotes a mnemonic'] }, "&&Replace"),
+									type: 'warning'
 								};
 
 								// Move with overwrite if the user confirms
 								if (this.messageService.confirm(confirm)) {
-									const targetDirty = this.textFileService.getDirty().filter(d => isEqualOrParent(d.fsPath, targetResource.fsPath, !isLinux /* ignorecase */));
+									const targetDirty = this.textFileService.getDirty().filter(d => paths.isEqualOrParent(d.fsPath, targetResource.fsPath, !isLinux /* ignorecase */));
 
 									// Make sure to revert all dirty in target first to be able to overwrite properly
 									return this.textFileService.revertAll(targetDirty, { soft: true /* do not attempt to load content from disk */ }).then(() => {

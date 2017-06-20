@@ -32,7 +32,13 @@ const extensions = [
 	'css',
 	'html',
 	'git',
-	'gulp'
+	'gulp',
+	'grunt',
+	'jake',
+	'merge-conflict',
+	'emmet',
+	'npm',
+	'jake'
 ];
 
 extensions.forEach(extension => npmInstall(`extensions/${extension}`));

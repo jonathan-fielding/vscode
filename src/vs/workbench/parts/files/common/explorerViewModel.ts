@@ -7,8 +7,7 @@
 
 import URI from 'vs/base/common/uri';
 import paths = require('vs/base/common/paths');
-import { IFileStat, isEqual, isParent, isEqualOrParent } from 'vs/platform/files/common/files';
-import { UntitledEditorInput } from 'vs/workbench/common/editor/untitledEditorInput';
+import { IFileStat, isParent } from 'vs/platform/files/common/files';
 import { IEditorInput } from 'vs/platform/editor/common/editor';
 import { IEditorGroup, toResource } from 'vs/workbench/common/editor';
 import { ResourceMap } from 'vs/base/common/map';
@@ -62,7 +61,7 @@ export class FileStat implements IFileStat {
 			// the folder is fully resolved if either it has a list of children or the client requested this by using the resolveTo
 			// array of resource path to resolve.
 			stat.isDirectoryResolved = !!raw.children || (!!resolveTo && resolveTo.some((r) => {
-				return isEqualOrParent(r.fsPath, stat.resource.fsPath, !isLinux /* ignorecase */);
+				return paths.isEqualOrParent(r.fsPath, stat.resource.fsPath, !isLinux /* ignorecase */);
 			}));
 
 			// Recurse into children
@@ -242,7 +241,7 @@ export class FileStat implements IFileStat {
 	public find(resource: URI): FileStat {
 
 		// Return if path found
-		if (isEqual(resource.fsPath, this.resource.fsPath, !isLinux /* ignorecase */)) {
+		if (paths.isEqual(resource.fsPath, this.resource.fsPath, !isLinux /* ignorecase */)) {
 			return this;
 		}
 
@@ -254,7 +253,7 @@ export class FileStat implements IFileStat {
 		for (let i = 0; i < this.children.length; i++) {
 			const child = this.children[i];
 
-			if (isEqual(resource.fsPath, child.resource.fsPath, !isLinux /* ignorecase */)) {
+			if (paths.isEqual(resource.fsPath, child.resource.fsPath, !isLinux /* ignorecase */)) {
 				return child;
 			}
 
@@ -361,7 +360,7 @@ export class OpenEditor {
 	}
 
 	public isUntitled(): boolean {
-		return this.editor instanceof UntitledEditorInput;
+		return !!toResource(this.editor, { supportSideBySide: true, filter: 'untitled' });
 	}
 
 	public isDirty(): boolean {

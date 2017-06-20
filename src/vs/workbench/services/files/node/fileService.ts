@@ -11,8 +11,9 @@ import os = require('os');
 import crypto = require('crypto');
 import assert = require('assert');
 
-import { isParent, FileOperation, FileOperationEvent, IContent, IFileService, IResolveFileOptions, IResolveContentOptions, IFileStat, IStreamContent, IFileOperationResult, FileOperationResult, IUpdateContentOptions, FileChangeType, IImportResult, MAX_FILE_SIZE, FileChangesEvent, isEqualOrParent } from 'vs/platform/files/common/files';
+import { isParent, FileOperation, FileOperationEvent, IContent, IFileService, IResolveFileOptions, IResolveContentOptions, IFileStat, IStreamContent, IFileOperationResult, FileOperationResult, IUpdateContentOptions, FileChangeType, IImportResult, MAX_FILE_SIZE, FileChangesEvent } from 'vs/platform/files/common/files';
 import strings = require('vs/base/common/strings');
+import { isEqualOrParent } from 'vs/base/common/paths';
 import { ResourceMap } from 'vs/base/common/map';
 import arrays = require('vs/base/common/arrays');
 import baseMime = require('vs/base/common/mime');
@@ -25,6 +26,7 @@ import uri from 'vs/base/common/uri';
 import nls = require('vs/nls');
 import { isWindows, isLinux } from 'vs/base/common/platform';
 import { dispose, IDisposable, toDisposable } from 'vs/base/common/lifecycle';
+import { IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
 
 import pfs = require('vs/base/node/pfs');
 import encoding = require('vs/base/node/encoding');
@@ -34,6 +36,7 @@ import { FileWatcher as UnixWatcherService } from 'vs/workbench/services/files/n
 import { FileWatcher as WindowsWatcherService } from 'vs/workbench/services/files/node/watcher/win32/watcherService';
 import { toFileChangesEvent, normalize, IRawFileChange } from 'vs/workbench/services/files/node/watcher/common';
 import Event, { Emitter } from 'vs/base/common/event';
+import { FileWatcher as NsfwWatcherService } from 'vs/workbench/services/files/node/watcher/nsfw/watcherService';
 
 export interface IEncodingOverride {
 	resource: uri;
@@ -50,6 +53,7 @@ export interface IFileServiceOptions {
 	watcherIgnoredPatterns?: string[];
 	disableWatcher?: boolean;
 	verboseLogging?: boolean;
+	useExperimentalFileWatcher?: boolean;
 }
 
 function etag(stat: fs.Stats): string;
@@ -89,7 +93,11 @@ export class FileService implements IFileService {
 	private fileChangesWatchDelayer: ThrottledDelayer<void>;
 	private undeliveredRawFileChangesEvents: IRawFileChange[];
 
-	constructor(basePath: string, options: IFileServiceOptions) {
+	constructor(
+		basePath: string,
+		options: IFileServiceOptions,
+		private contextService: IWorkspaceContextService
+	) {
 		this.toDispose = [];
 		this.basePath = basePath ? paths.normalize(basePath) : void 0;
 
@@ -119,10 +127,14 @@ export class FileService implements IFileService {
 		}
 
 		if (this.basePath && !this.options.disableWatcher) {
-			if (isWindows) {
-				this.setupWin32WorkspaceWatching();
+			if (this.options.useExperimentalFileWatcher) {
+				this.setupNsfwWorkspceWatching();
 			} else {
-				this.setupUnixWorkspaceWatching();
+				if (isWindows) {
+					this.setupWin32WorkspaceWatching();
+				} else {
+					this.setupUnixWorkspaceWatching();
+				}
 			}
 		}
 
@@ -153,6 +165,10 @@ export class FileService implements IFileService {
 		this.toDispose.push(toDisposable(new UnixWatcherService(this.basePath, this.options.watcherIgnoredPatterns, e => this._onFileChanges.fire(e), this.options.errorLogger, this.options.verboseLogging).startWatching()));
 	}
 
+	private setupNsfwWorkspceWatching(): void {
+		this.toDispose.push(toDisposable(new NsfwWatcherService(this.basePath, this.options.watcherIgnoredPatterns, e => this._onFileChanges.fire(e), this.options.errorLogger, this.options.verboseLogging, this.contextService).startWatching()));
+	}
+
 	public resolveFile(resource: uri, options?: IResolveFileOptions): TPromise<IFileStat> {
 		return this.resolve(resource, options);
 	}
@@ -174,7 +190,7 @@ export class FileService implements IFileService {
 
 		// Guard early against attempts to resolve an invalid file path
 		if (resource.scheme !== 'file' || !resource.fsPath) {
-			return TPromise.wrapError(<IFileOperationResult>{
+			return TPromise.wrapError<IStreamContent>(<IFileOperationResult>{
 				message: nls.localize('fileInvalidPath', "Invalid file resource ({0})", resource.toString()),
 				fileOperationResult: FileOperationResult.FILE_INVALID_PATH
 			});
@@ -185,7 +201,7 @@ export class FileService implements IFileService {
 
 			// Return early if resource is a directory
 			if (model.isDirectory) {
-				return TPromise.wrapError(<IFileOperationResult>{
+				return TPromise.wrapError<IStreamContent>(<IFileOperationResult>{
 					message: nls.localize('fileIsDirectoryError', "File is directory ({0})", absolutePath),
 					fileOperationResult: FileOperationResult.FILE_IS_DIRECTORY
 				});
@@ -193,14 +209,14 @@ export class FileService implements IFileService {
 
 			// Return early if file not modified since
 			if (options && options.etag && options.etag === model.etag) {
-				return TPromise.wrapError(<IFileOperationResult>{
+				return TPromise.wrapError<IStreamContent>(<IFileOperationResult>{
 					fileOperationResult: FileOperationResult.FILE_NOT_MODIFIED_SINCE
 				});
 			}
 
 			// Return early if file is too large to load
 			if (types.isNumber(model.size) && model.size > MAX_FILE_SIZE) {
-				return TPromise.wrapError(<IFileOperationResult>{
+				return TPromise.wrapError<IStreamContent>(<IFileOperationResult>{
 					fileOperationResult: FileOperationResult.FILE_TOO_LARGE
 				});
 			}
@@ -212,7 +228,7 @@ export class FileService implements IFileService {
 
 				// Return error early if client only accepts text and this is not text
 				if (options && options.acceptTextOnly && !isText) {
-					return TPromise.wrapError(<IFileOperationResult>{
+					return TPromise.wrapError<IStreamContent>(<IFileOperationResult>{
 						message: nls.localize('fileBinaryError', "File seems to be binary and cannot be opened as text"),
 						fileOperationResult: FileOperationResult.FILE_IS_BINARY
 					});
@@ -242,7 +258,7 @@ export class FileService implements IFileService {
 
 			// bubble up existing file operation results
 			if (!types.isUndefinedOrNull((<IFileOperationResult>error).fileOperationResult)) {
-				return TPromise.wrapError(error);
+				return TPromise.wrapError<IStreamContent>(error);
 			}
 
 			// check if the file does not exist
@@ -250,14 +266,14 @@ export class FileService implements IFileService {
 
 				// Return if file not found
 				if (!exists) {
-					return TPromise.wrapError(<IFileOperationResult>{
+					return TPromise.wrapError<IStreamContent>(<IFileOperationResult>{
 						message: nls.localize('fileNotFoundError', "File not found ({0})", absolutePath),
 						fileOperationResult: FileOperationResult.FILE_NOT_FOUND
 					});
 				}
 
 				// otherwise just give up
-				return TPromise.wrapError(error);
+				return TPromise.wrapError<IStreamContent>(error);
 			});
 		});
 	}
@@ -427,16 +443,16 @@ export class FileService implements IFileService {
 
 			// Return early with conflict if target exists and we are not told to overwrite
 			if (exists && !isCaseRename && !overwrite) {
-				return TPromise.wrapError(<IFileOperationResult>{
+				return TPromise.wrapError<boolean>(<IFileOperationResult>{
 					fileOperationResult: FileOperationResult.FILE_MOVE_CONFLICT
 				});
 			}
 
 			// 2.) make sure target is deleted before we move/copy unless this is a case rename of the same file
-			let deleteTargetPromise = TPromise.as(null);
+			let deleteTargetPromise = TPromise.as<void>(void 0);
 			if (exists && !isCaseRename) {
 				if (isEqualOrParent(sourcePath, targetPath, !isLinux /* ignorecase */)) {
-					return TPromise.wrapError(nls.localize('unableToMoveCopyError', "Unable to move/copy. File would replace folder it is contained in.")); // catch this corner case!
+					return TPromise.wrapError<boolean>(nls.localize('unableToMoveCopyError', "Unable to move/copy. File would replace folder it is contained in.")); // catch this corner case!
 				}
 
 				deleteTargetPromise = this.del(uri.file(targetPath));
@@ -468,7 +484,7 @@ export class FileService implements IFileService {
 		// 1.) resolve
 		return pfs.stat(sourcePath).then(stat => {
 			if (stat.isDirectory()) {
-				return TPromise.wrapError(nls.localize('foldersCopyError', "Folders cannot be copied into the workspace. Please select individual files to copy them.")); // for now we do not allow to import a folder into a workspace
+				return TPromise.wrapError<IImportResult>(nls.localize('foldersCopyError', "Folders cannot be copied into the workspace. Please select individual files to copy them.")); // for now we do not allow to import a folder into a workspace
 			}
 
 			// 2.) copy
@@ -528,7 +544,7 @@ export class FileService implements IFileService {
 
 		// Return early if file is too large to load
 		if (types.isNumber(model.size) && model.size > MAX_FILE_SIZE) {
-			return TPromise.wrapError(<IFileOperationResult>{
+			return TPromise.wrapError<IStreamContent>(<IFileOperationResult>{
 				fileOperationResult: FileOperationResult.FILE_TOO_LARGE
 			});
 		}
@@ -615,7 +631,7 @@ export class FileService implements IFileService {
 			if (exists) {
 				return pfs.stat(absolutePath).then(stat => {
 					if (stat.isDirectory()) {
-						return TPromise.wrapError(new Error('Expected file is actually a directory'));
+						return TPromise.wrapError<boolean>(new Error('Expected file is actually a directory'));
 					}
 
 					// Dirty write prevention
@@ -623,7 +639,7 @@ export class FileService implements IFileService {
 
 						// Find out if content length has changed
 						if (options.etag !== etag(stat.size, options.mtime)) {
-							return TPromise.wrapError(<IFileOperationResult>{
+							return TPromise.wrapError<boolean>(<IFileOperationResult>{
 								message: 'File Modified Since',
 								fileOperationResult: FileOperationResult.FILE_MODIFIED_SINCE
 							});
@@ -635,7 +651,7 @@ export class FileService implements IFileService {
 
 					// Throw if file is readonly and we are not instructed to overwrite
 					if (readonly && !options.overwriteReadonly) {
-						return TPromise.wrapError(<IFileOperationResult>{
+						return TPromise.wrapError<boolean>(<IFileOperationResult>{
 							message: nls.localize('fileReadOnlyError', "File is Read Only"),
 							fileOperationResult: FileOperationResult.FILE_READ_ONLY
 						});
@@ -825,7 +841,7 @@ export class StatResolver {
 				});
 			}
 
-			return new TPromise((c, e) => {
+			return new TPromise<IFileStat>((c, e) => {
 
 				// Load children
 				this.resolveChildren(this.resource.fsPath, absoluteTargetPaths, options && options.resolveSingleChildDescendants, (children) => {

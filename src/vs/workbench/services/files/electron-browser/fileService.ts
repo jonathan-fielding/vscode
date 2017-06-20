@@ -85,11 +85,12 @@ export class FileService implements IFileService {
 			encodingOverride,
 			watcherIgnoredPatterns,
 			verboseLogging: environmentService.verbose,
+			useExperimentalFileWatcher: configuration.files.useExperimentalFileWatcher
 		};
 
 		// create service
 		const workspace = this.contextService.getWorkspace();
-		this.raw = new NodeFileService(workspace ? workspace.resource.fsPath : void 0, fileServiceConfig);
+		this.raw = new NodeFileService(workspace ? workspace.resource.fsPath : void 0, fileServiceConfig, contextService);
 
 		// Listeners
 		this.registerListeners();
@@ -134,7 +135,7 @@ export class FileService implements IFileService {
 		this.toUnbind.push(this.raw.onAfterOperation(e => this._onAfterOperation.fire(e)));
 
 		// Config changes
-		this.toUnbind.push(this.configurationService.onDidUpdateConfiguration(e => this.onConfigurationChange(e.config)));
+		this.toUnbind.push(this.configurationService.onDidUpdateConfiguration(e => this.onConfigurationChange(this.configurationService.getConfiguration<IFilesConfiguration>())));
 
 		// Editor changing
 		this.toUnbind.push(this.editorGroupService.onEditorsChanged(() => this.onEditorsChanged()));

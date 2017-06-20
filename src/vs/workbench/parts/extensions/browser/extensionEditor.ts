@@ -25,7 +25,7 @@ import { BaseEditor } from 'vs/workbench/browser/parts/editor/baseEditor';
 import { IViewletService } from 'vs/workbench/services/viewlet/browser/viewlet';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
-import { IExtensionGalleryService, IExtensionManifest, IKeyBinding } from 'vs/platform/extensionManagement/common/extensionManagement';
+import { IExtensionGalleryService, IExtensionManifest, IKeyBinding, IView } from 'vs/platform/extensionManagement/common/extensionManagement';
 import { ResolvedKeybinding } from 'vs/base/common/keyCodes';
 import { ExtensionsInput } from 'vs/workbench/parts/extensions/common/extensionsInput';
 import { IExtensionsWorkbenchService, IExtensionsViewlet, VIEWLET_ID, IExtension, IExtensionDependencies } from 'vs/workbench/parts/extensions/common/extensions';
@@ -46,9 +46,9 @@ import { Tree } from 'vs/base/parts/tree/browser/treeImpl';
 import { Position } from 'vs/platform/editor/common/editor';
 import { IListService } from 'vs/platform/list/browser/listService';
 import { IPartService, Parts } from 'vs/workbench/services/part/common/partService';
-import { IThemeService } from "vs/platform/theme/common/themeService";
+import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { KeybindingLabel } from 'vs/base/browser/ui/keybindingLabel/keybindingLabel';
-import { attachListStyler } from "vs/platform/theme/common/styler";
+import { attachListStyler } from 'vs/platform/theme/common/styler';
 
 function renderBody(body: string): string {
 	const nonce = new Date().getTime() + '' + new Date().getMilliseconds();
@@ -358,7 +358,7 @@ export class ExtensionEditor extends BaseEditor {
 		return this.loadContents(() => this.extensionManifest.get()
 			.then(manifest => {
 				const content = $('div', { class: 'subcontent' });
-				const scrollableContent = new DomScrollableElement(content, { canUseTranslate3d: false });
+				const scrollableContent = new DomScrollableElement(content, {});
 
 				const layout = () => scrollableContent.scanDomNode();
 				const removeLayoutParticipant = arrays.insert(this.layoutParticipants, { layout });
@@ -370,7 +370,8 @@ export class ExtensionEditor extends BaseEditor {
 					this.renderLanguages(content, manifest, layout),
 					this.renderThemes(content, manifest, layout),
 					this.renderJSONValidation(content, manifest, layout),
-					this.renderDebuggers(content, manifest, layout)
+					this.renderDebuggers(content, manifest, layout),
+					this.renderViews(content, manifest, layout)
 				];
 
 				const isEmpty = !renders.reduce((v, r) => r || v, false);
@@ -395,7 +396,7 @@ export class ExtensionEditor extends BaseEditor {
 		return this.loadContents(() => {
 			return this.extensionDependencies.get().then(extensionDependencies => {
 				const content = $('div', { class: 'subcontent' });
-				const scrollableContent = new DomScrollableElement(content, { canUseTranslate3d: false });
+				const scrollableContent = new DomScrollableElement(content, {});
 				append(this.content, scrollableContent.getDomNode());
 				this.contentDisposables.push(scrollableContent);
 
@@ -434,7 +435,7 @@ export class ExtensionEditor extends BaseEditor {
 
 		tree.setInput(extensionDependencies);
 
-		this.contentDisposables.push(tree.addListener2('selection', event => {
+		this.contentDisposables.push(tree.addListener('selection', event => {
 			if (event && event.payload && event.payload.origin === 'keyboard') {
 				controller.openExtension(tree, false);
 			}
@@ -488,6 +489,32 @@ export class ExtensionEditor extends BaseEditor {
 			$('table', null,
 				$('tr', null, $('th', null, localize('debugger name', "Name"))),
 				...contrib.map(d => $('tr', null, $('td', null, d.label || d.type)))
+			)
+		);
+
+		append(container, details);
+		return true;
+	}
+
+	private renderViews(container: HTMLElement, manifest: IExtensionManifest, onDetailsToggle: Function): boolean {
+		const contributes = manifest.contributes;
+		const contrib = contributes && contributes.views || {};
+
+		let views = <{ id: string, name: string, location: string }[]>Object.keys(contrib).reduce((result, location) => {
+			let viewsForLocation: IView[] = contrib[location];
+			result.push(...viewsForLocation.map(view => ({ ...view, location })));
+			return result;
+		}, []);
+
+		if (!views.length) {
+			return false;
+		}
+
+		const details = $('details', { open: true, ontoggle: onDetailsToggle },
+			$('summary', null, localize('views', "Views ({0})", views.length)),
+			$('table', null,
+				$('tr', null, $('th', null, localize('view id', "ID")), $('th', null, localize('view name', "Name")), $('th', null, localize('view location', "Where"))),
+				...views.map(view => $('tr', null, $('td', null, view.id), $('td', null, view.name), $('td', null, view.location)))
 			)
 		);
 
@@ -688,6 +715,10 @@ export class ExtensionEditor extends BaseEditor {
 		}
 
 		const keyBinding = KeybindingIO.readKeybinding(key || rawKeyBinding.key, OS);
+		if (!keyBinding) {
+			return null;
+		}
+
 		return this.keybindingService.resolveKeybinding(keyBinding)[0];
 	}
 

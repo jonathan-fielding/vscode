@@ -21,14 +21,12 @@ import { IDisposable, dispose, IReference } from 'vs/base/common/lifecycle';
 import { telemetryURIDescriptor } from 'vs/platform/telemetry/common/telemetryUtils';
 import { Verbosity } from 'vs/platform/editor/common/editor';
 import { IEnvironmentService } from 'vs/platform/environment/common/environment';
-import { ITextModelResolverService } from "vs/editor/common/services/resolverService";
+import { ITextModelService } from 'vs/editor/common/services/resolverService';
 
 /**
  * A file editor input is the input type for the file editor of file system resources.
  */
 export class FileEditorInput extends EditorInput implements IFileEditorInput {
-	private resource: URI;
-	private preferredEncoding: string;
 	private forceOpenAsBinary: boolean;
 
 	private textModelReference: TPromise<IReference<TextFileEditorModel>>;
@@ -46,20 +44,17 @@ export class FileEditorInput extends EditorInput implements IFileEditorInput {
 	 * An editor input who's contents are retrieved from file services.
 	 */
 	constructor(
-		resource: URI,
-		preferredEncoding: string,
+		private resource: URI,
+		private preferredEncoding: string,
 		@IInstantiationService private instantiationService: IInstantiationService,
 		@IWorkspaceContextService private contextService: IWorkspaceContextService,
 		@ITextFileService private textFileService: ITextFileService,
 		@IEnvironmentService private environmentService: IEnvironmentService,
-		@ITextModelResolverService private textModelResolverService: ITextModelResolverService
+		@ITextModelService private textModelResolverService: ITextModelService
 	) {
 		super();
 
 		this.toUnbind = [];
-
-		this.resource = resource;
-		this.preferredEncoding = preferredEncoding;
 
 		this.registerListeners();
 	}
@@ -226,19 +221,21 @@ export class FileEditorInput extends EditorInput implements IFileEditorInput {
 			}
 
 			// Bubble any other error up
-			return TPromise.wrapError(error);
+			return TPromise.wrapError<TextFileEditorModel>(error);
 		});
 	}
 
 	private resolveAsBinary(): TPromise<BinaryEditorModel> {
-		return this.instantiationService.createInstance(BinaryEditorModel, this.resource, this.getName()).load();
+		return this.instantiationService.createInstance(BinaryEditorModel, this.resource, this.getName())
+			.load()
+			.then(x => x as BinaryEditorModel);
 	}
 
 	public isResolved(): boolean {
 		return !!this.textFileService.models.get(this.resource);
 	}
 
-	public getTelemetryDescriptor(): { [key: string]: any; } {
+	public getTelemetryDescriptor(): object {
 		const descriptor = super.getTelemetryDescriptor();
 		descriptor['resource'] = telemetryURIDescriptor(this.getResource());
 

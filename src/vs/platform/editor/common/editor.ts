@@ -90,6 +90,11 @@ export interface IUntitledResourceInput extends IBaseResourceInput {
 	 * Optional contents of the untitled resource.
 	 */
 	contents?: string;
+
+	/**
+	 * Optional encoding of the untitled resource.
+	 */
+	encoding?: string;
 }
 
 export interface IResourceDiffInput extends IBaseResourceInput {
@@ -247,6 +252,11 @@ export interface IEditorOptions {
 	 * Will reveal the editor if it is already opened and visible in any of the opened editor groups.
 	 */
 	revealIfVisible?: boolean;
+
+	/**
+	 * Will reveal the editor if it is already opened (even when not visible) in any of the opened editor groups.
+	 */
+	revealIfOpened?: boolean;
 
 	/**
 	 * An editor that is pinned remains in the editor stack even when another editor is being opened.

@@ -25,7 +25,7 @@ import { dispose, IDisposable } from 'vs/base/common/lifecycle';
 import { VIEWLET_ID } from 'vs/workbench/parts/files/common/files';
 import labels = require('vs/base/common/labels');
 import { ITextFileService } from 'vs/workbench/services/textfile/common/textfiles';
-import { IFileService, IFileStat, isEqual, isEqualOrParent } from 'vs/platform/files/common/files';
+import { IFileService, IFileStat } from 'vs/platform/files/common/files';
 import { toResource, IEditorIdentifier, EditorInput } from 'vs/workbench/common/editor';
 import { FileStat, NewStatPlaceholder } from 'vs/workbench/parts/files/common/explorerViewModel';
 import { ExplorerView } from 'vs/workbench/parts/files/browser/views/explorerView';
@@ -47,7 +47,7 @@ import { IBackupFileService } from 'vs/workbench/services/backup/common/backup';
 import { IWindowsService, IWindowService } from 'vs/platform/windows/common/windows';
 import { withFocussedFilesExplorer, revealInOSCommand, revealInExplorerCommand, copyPathCommand } from 'vs/workbench/parts/files/browser/fileCommands';
 import { ITelemetryData } from 'vs/platform/telemetry/common/telemetry';
-import { IEnvironmentService } from "vs/platform/environment/common/environment";
+import { IEnvironmentService } from 'vs/platform/environment/common/environment';
 
 export interface IEditableData {
 	action: IAction;
@@ -193,7 +193,7 @@ export class TriggerRenameFileAction extends BaseFileAction {
 		this.tree.refresh(stat, false).then(() => {
 			this.tree.setHighlight(stat);
 
-			const unbind = this.tree.addListener2(CommonEventType.HIGHLIGHT, (e: IHighlightEvent) => {
+			const unbind = this.tree.addListener(CommonEventType.HIGHLIGHT, (e: IHighlightEvent) => {
 				if (!e.highlight) {
 					viewletState.clearEditable(stat);
 					this.tree.refresh(stat).done(null, errors.onUnexpectedError);
@@ -285,7 +285,7 @@ class RenameFileAction extends BaseRenameAction {
 
 	public runAction(newName: string): TPromise<any> {
 
-		const dirty = this.textFileService.getDirty().filter(d => isEqualOrParent(d.fsPath, this.element.resource.fsPath, !isLinux /* ignorecase */));
+		const dirty = this.textFileService.getDirty().filter(d => paths.isEqualOrParent(d.fsPath, this.element.resource.fsPath, !isLinux /* ignorecase */));
 		const dirtyRenamed: URI[] = [];
 		return TPromise.join(dirty.map(d => {
 
@@ -293,7 +293,7 @@ class RenameFileAction extends BaseRenameAction {
 			let renamed: URI;
 
 			// If the dirty file itself got moved, just reparent it to the target folder
-			if (isEqual(this.element.resource.fsPath, d.fsPath)) {
+			if (paths.isEqual(this.element.resource.fsPath, d.fsPath)) {
 				renamed = URI.file(targetPath);
 			}
 
@@ -407,7 +407,7 @@ export class BaseNewAction extends BaseFileAction {
 						return this.tree.reveal(stat, 0.5).then(() => {
 							this.tree.setHighlight(stat);
 
-							const unbind = this.tree.addListener2(CommonEventType.HIGHLIGHT, (e: IHighlightEvent) => {
+							const unbind = this.tree.addListener(CommonEventType.HIGHLIGHT, (e: IHighlightEvent) => {
 								if (!e.highlight) {
 									stat.destroy();
 									this.tree.refresh(folder).done(null, errors.onUnexpectedError);
@@ -660,7 +660,7 @@ export class BaseDeleteFileAction extends BaseFileAction {
 
 		// Handle dirty
 		let revertPromise: TPromise<any> = TPromise.as(null);
-		const dirty = this.textFileService.getDirty().filter(d => isEqualOrParent(d.fsPath, this.element.resource.fsPath, !isLinux /* ignorecase */));
+		const dirty = this.textFileService.getDirty().filter(d => paths.isEqualOrParent(d.fsPath, this.element.resource.fsPath, !isLinux /* ignorecase */));
 		if (dirty.length) {
 			let message: string;
 			if (this.element.isDirectory) {
@@ -698,13 +698,15 @@ export class BaseDeleteFileAction extends BaseFileAction {
 					confirm = {
 						message: this.element.isDirectory ? nls.localize('confirmMoveTrashMessageFolder', "Are you sure you want to delete '{0}' and its contents?", this.element.name) : nls.localize('confirmMoveTrashMessageFile', "Are you sure you want to delete '{0}'?", this.element.name),
 						detail: isWindows ? nls.localize('undoBin', "You can restore from the recycle bin.") : nls.localize('undoTrash', "You can restore from the trash."),
-						primaryButton
+						primaryButton,
+						type: 'question'
 					};
 				} else {
 					confirm = {
 						message: this.element.isDirectory ? nls.localize('confirmDeleteMessageFolder', "Are you sure you want to permanently delete '{0}' and its contents?", this.element.name) : nls.localize('confirmDeleteMessageFile', "Are you sure you want to permanently delete '{0}'?", this.element.name),
 						detail: nls.localize('irreversible', "This action is irreversible!"),
-						primaryButton
+						primaryButton,
+						type: 'warning'
 					};
 				}
 
@@ -823,7 +825,8 @@ export class ImportFileAction extends BaseFileAction {
 						const confirm: IConfirmation = {
 							message: nls.localize('confirmOverwrite', "A file or folder with the same name already exists in the destination folder. Do you want to replace it?"),
 							detail: nls.localize('irreversible', "This action is irreversible!"),
-							primaryButton: nls.localize({ key: 'replaceButtonLabel', comment: ['&& denotes a mnemonic'] }, "&&Replace")
+							primaryButton: nls.localize({ key: 'replaceButtonLabel', comment: ['&& denotes a mnemonic'] }, "&&Replace"),
+							type: 'warning'
 						};
 
 						overwrite = this.messageService.confirm(confirm);
@@ -843,7 +846,7 @@ export class ImportFileAction extends BaseFileAction {
 							// if the target exists and is dirty, make sure to revert it. otherwise the dirty contents
 							// of the target file would replace the contents of the imported file. since we already
 							// confirmed the overwrite before, this is OK.
-							let revertPromise = TPromise.as(null);
+							let revertPromise = TPromise.as<any>(null);
 							if (this.textFileService.isDirty(targetFile)) {
 								revertPromise = this.textFileService.revertAll([targetFile], { soft: true });
 							}
@@ -952,7 +955,7 @@ export class PasteFileAction extends BaseFileAction {
 		}
 
 		// Check if target is ancestor of pasted folder
-		if (!isEqual(this.element.resource.fsPath, fileToCopy.resource.fsPath) && isEqualOrParent(this.element.resource.fsPath, fileToCopy.resource.fsPath, !isLinux /* ignorecase */)) {
+		if (!paths.isEqual(this.element.resource.fsPath, fileToCopy.resource.fsPath) && paths.isEqualOrParent(this.element.resource.fsPath, fileToCopy.resource.fsPath, !isLinux /* ignorecase */)) {
 			return false;
 		}
 
@@ -1354,7 +1357,7 @@ export abstract class BaseSaveFileAction extends BaseActionWithErrorReporting {
 			if (this.isSaveAs() || source.scheme === 'untitled') {
 				let encodingOfSource: string;
 				if (source.scheme === 'untitled') {
-					encodingOfSource = this.untitledEditorService.get(source).getEncoding();
+					encodingOfSource = this.untitledEditorService.getEncoding(source);
 				} else if (source.scheme === 'file') {
 					const textModel = this.textFileService.models.get(source);
 					encodingOfSource = textModel && textModel.getEncoding(); // text model can be null e.g. if this is a binary file!
@@ -1494,17 +1497,32 @@ export abstract class BaseSaveAllAction extends BaseActionWithErrorReporting {
 
 		// Store some properties per untitled file to restore later after save is completed
 		const mapUntitledToProperties: { [resource: string]: { encoding: string; indexInGroups: number[]; activeInGroups: boolean[] } } = Object.create(null);
-		this.textFileService.getDirty()
-			.filter(r => r.scheme === 'untitled')			// All untitled resources
-			.map(r => this.untitledEditorService.get(r))	// Mapped to their inputs
-			.filter(input => !!input)								// If possible :)
-			.forEach(input => {
-				mapUntitledToProperties[input.getResource().toString()] = {
-					encoding: input.getEncoding(),
-					indexInGroups: stacks.groups.map(g => g.indexOf(input)),
-					activeInGroups: stacks.groups.map(g => g.isActive(input))
-				};
+		this.untitledEditorService.getDirty().forEach(resource => {
+			const activeInGroups: boolean[] = [];
+			const indexInGroups: number[] = [];
+			const encoding = this.untitledEditorService.getEncoding(resource);
+
+			// For each group
+			stacks.groups.forEach((group, groupIndex) => {
+
+				// Find out if editor is active in group
+				const activeEditor = group.activeEditor;
+				const activeResource = toResource(activeEditor, { supportSideBySide: true });
+				activeInGroups[groupIndex] = (activeResource && activeResource.toString() === resource.toString());
+
+				// Find index of editor in group
+				indexInGroups[groupIndex] = -1;
+				group.getEditors().forEach((editor, editorIndex) => {
+					const editorResource = toResource(editor, { supportSideBySide: true });
+					if (editorResource && editorResource.toString() === resource.toString()) {
+						indexInGroups[groupIndex] = editorIndex;
+						return;
+					}
+				});
 			});
+
+			mapUntitledToProperties[resource.toString()] = { encoding, indexInGroups, activeInGroups };
+		});
 
 		// Save all
 		return this.textFileService.saveAll(this.getSaveAllArguments(context)).then(results => {

@@ -11,7 +11,6 @@ import * as semver from 'semver';
 import * as path from 'path';
 import Event, { Emitter, chain } from 'vs/base/common/event';
 import { index } from 'vs/base/common/arrays';
-import { LinkedMap as Map } from 'vs/base/common/map';
 import { assign } from 'vs/base/common/objects';
 import { ThrottledDelayer } from 'vs/base/common/async';
 import { isPromiseCanceledError } from 'vs/base/common/errors';
@@ -26,6 +25,7 @@ import {
 import { getGalleryExtensionIdFromLocal, getGalleryExtensionTelemetryData, getLocalExtensionTelemetryData } from 'vs/platform/extensionManagement/common/extensionManagementUtil';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
+import { IConfigurationEditingService, ConfigurationTarget } from 'vs/workbench/services/configuration/common/configurationEditing';
 import { IChoiceService, IMessageService } from 'vs/platform/message/common/message';
 import Severity from 'vs/base/common/severity';
 import URI from 'vs/base/common/uri';
@@ -188,7 +188,7 @@ class Extension implements IExtension {
 			return readFile(uri.fsPath, 'utf8');
 		}
 
-		return TPromise.wrapError('not available');
+		return TPromise.wrapError<string>('not available');
 	}
 
 	getChangelog(): TPromise<string> {
@@ -199,7 +199,7 @@ class Extension implements IExtension {
 		const changelogUrl = this.local && this.local.changelogUrl;
 
 		if (!changelogUrl) {
-			return TPromise.wrapError('not available');
+			return TPromise.wrapError<string>('not available');
 		}
 
 		const uri = URI.parse(changelogUrl);
@@ -208,7 +208,7 @@ class Extension implements IExtension {
 			return readFile(uri.fsPath, 'utf8');
 		}
 
-		return TPromise.wrapError('not available');
+		return TPromise.wrapError<string>('not available');
 	}
 
 	get dependencies(): string[] {
@@ -308,12 +308,15 @@ export class ExtensionsWorkbenchService implements IExtensionsWorkbenchService {
 	private _onChange: Emitter<void> = new Emitter<void>();
 	get onChange(): Event<void> { return this._onChange.event; }
 
+	private _isAutoUpdateEnabled: boolean;
+
 	constructor(
 		@IInstantiationService private instantiationService: IInstantiationService,
 		@IWorkbenchEditorService private editorService: IWorkbenchEditorService,
 		@IExtensionManagementService private extensionService: IExtensionManagementService,
 		@IExtensionGalleryService private galleryService: IExtensionGalleryService,
 		@IConfigurationService private configurationService: IConfigurationService,
+		@IConfigurationEditingService private configurationEditingService: IConfigurationEditingService,
 		@ITelemetryService private telemetryService: ITelemetryService,
 		@IMessageService private messageService: IMessageService,
 		@IChoiceService private choiceService: IChoiceService,
@@ -336,6 +339,17 @@ export class ExtensionsWorkbenchService implements IExtensionsWorkbenchService {
 		chain(urlService.onOpenURL)
 			.filter(uri => /^extension/.test(uri.path))
 			.on(this.onOpenExtensionUrl, this, this.disposables);
+
+		this._isAutoUpdateEnabled = this.configurationService.getConfiguration<IExtensionsConfiguration>(ConfigurationKey).autoUpdate;
+		this.configurationService.onDidUpdateConfiguration(() => {
+			const isAutoUpdateEnabled = this.configurationService.getConfiguration<IExtensionsConfiguration>(ConfigurationKey).autoUpdate;
+			if (this._isAutoUpdateEnabled !== isAutoUpdateEnabled) {
+				this._isAutoUpdateEnabled = isAutoUpdateEnabled;
+				if (this._isAutoUpdateEnabled) {
+					this.checkForUpdates();
+				}
+			}
+		}, this, this.disposables);
 
 		this.queryLocal().done(() => this.eventuallySyncWithGallery(true));
 	}
@@ -374,13 +388,13 @@ export class ExtensionsWorkbenchService implements IExtensionsWorkbenchService {
 					return TPromise.as(singlePagePager([]));
 				}
 
-				return TPromise.wrapError(err);
+				return TPromise.wrapError<IPager<IExtension>>(err);
 			});
 	}
 
 	loadDependencies(extension: IExtension): TPromise<IExtensionDependencies> {
 		if (!extension.dependencies.length) {
-			return TPromise.wrap(null);
+			return TPromise.wrap<IExtensionDependencies>(null);
 		}
 
 		return this.galleryService.getAllDependencies((<Extension>extension).gallery)
@@ -426,6 +440,17 @@ export class ExtensionsWorkbenchService implements IExtensionsWorkbenchService {
 		return this.syncDelayer.trigger(() => this.syncWithGallery(), 0);
 	}
 
+	get isAutoUpdateEnabled(): boolean {
+		return this._isAutoUpdateEnabled;
+	}
+
+	setAutoUpdate(autoUpdate: boolean): TPromise<void> {
+		if (this.isAutoUpdateEnabled === autoUpdate) {
+			return TPromise.as(null);
+		}
+		return this.configurationEditingService.writeConfiguration(ConfigurationTarget.USER, { key: 'extensions.autoUpdate', value: autoUpdate });
+	}
+
 	private eventuallySyncWithGallery(immediate = false): void {
 		const loop = () => this.syncWithGallery().then(() => this.eventuallySyncWithGallery());
 		const delay = immediate ? 0 : ExtensionsWorkbenchService.SyncPeriod;
@@ -452,9 +477,7 @@ export class ExtensionsWorkbenchService implements IExtensionsWorkbenchService {
 	}
 
 	private autoUpdateExtensions(): TPromise<any> {
-		const config = this.configurationService.getConfiguration<IExtensionsConfiguration>(ConfigurationKey);
-
-		if (!config.autoUpdate) {
+		if (!this.isAutoUpdateEnabled) {
 			return TPromise.as(null);
 		}
 
@@ -533,7 +556,7 @@ export class ExtensionsWorkbenchService implements IExtensionsWorkbenchService {
 			nls.localize('enable', "Yes"),
 			nls.localize('doNotEnable', "No")
 		];
-		return this.choiceService.choose(Severity.Info, message, options, true)
+		return this.choiceService.choose(Severity.Info, message, options, 1, true)
 			.then<void>(value => {
 				if (value === 0) {
 					return this.checkAndSetEnablement(extension, dependencies, true, workspace);
@@ -549,7 +572,7 @@ export class ExtensionsWorkbenchService implements IExtensionsWorkbenchService {
 			nls.localize('disableAll', "All"),
 			nls.localize('cancel', "Cancel")
 		];
-		return this.choiceService.choose(Severity.Info, message, options, true)
+		return this.choiceService.choose(Severity.Info, message, options, 2, true)
 			.then<void>(value => {
 				if (value === 0) {
 					return this.checkAndSetEnablement(extension, [], false, workspace);
@@ -708,7 +731,7 @@ export class ExtensionsWorkbenchService implements IExtensionsWorkbenchService {
 		this._onChange.fire();
 	}
 
-	private onDidUninstallExtension({id, error}: DidUninstallExtensionEvent): void {
+	private onDidUninstallExtension({ id, error }: DidUninstallExtensionEvent): void {
 		if (!error) {
 			this.installed = this.installed.filter(e => e.local.id !== id);
 		}
@@ -782,21 +805,32 @@ export class ExtensionsWorkbenchService implements IExtensionsWorkbenchService {
 		const extensionId = match[1];
 
 		this.queryGallery({ names: [extensionId] })
-			.done(result => {
+			.then(result => {
 				if (result.total < 1) {
-					return;
+					return TPromise.as(null);
 				}
 
 				const extension = result.firstPage[0];
-				const promises = [this.open(extension)];
-
-				if (this.local.every(local => local.id !== extension.id)) {
-					promises.push(this.install(extension));
-				}
-
-				TPromise.join(promises)
-					.done(null, error => this.onError(error));
-			});
+				return this.open(extension).then(() => {
+					const message = nls.localize('installConfirmation', "Would you like to install the '{0}' extension?", extension.displayName, extension.publisher);
+					const options = [
+						nls.localize('install', "Install"),
+						nls.localize('cancel', "Cancel")
+					];
+					return this.choiceService.choose(Severity.Info, message, options, 2, false)
+						.then<void>(value => {
+							if (value === 0) {
+								const promises: TPromise<any>[] = [];
+								if (this.local.every(local => local.id !== extension.id)) {
+									promises.push(this.install(extension));
+								}
+								return TPromise.join(promises);
+							}
+							return TPromise.as(null);
+						});
+				});
+			})
+			.done(undefined, error => this.onError(error));
 	}
 
 	dispose(): void {
