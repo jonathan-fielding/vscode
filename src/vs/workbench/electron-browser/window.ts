@@ -207,6 +207,7 @@ export class ElectronWindow extends Themable {
 		// Support runAction event
 		ipc.on('vscode:runAction', (event, actionId: string) => {
 			this.commandService.executeCommand(actionId, { from: 'menu' }).done(undefined, err => this.messageService.show(Severity.Error, err));
+			ipc.send('vscode:runAction', event, actionId);
 		});
 
 		// Support resolve keybindings event

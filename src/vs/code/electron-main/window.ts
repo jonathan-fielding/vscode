@@ -77,7 +77,7 @@ export class CodeWindow implements ICodeWindow {
 	private currentMenuBarVisibility: MenuBarVisibility;
 	private toDispose: IDisposable[];
 	private representedFilename: string;
-
+	private touchbar: VSCodeTouchbar;
 	private whenReadyCallbacks: TValueCallback<CodeWindow>[];
 
 	private currentConfig: IWindowConfiguration;
@@ -814,6 +814,7 @@ export class CodeWindow implements ICodeWindow {
 	}
 
 	public send(channel: string, ...args: any[]): void {
+		console.log(channel)
 		this._win.webContents.send(channel, ...args);
 	}
 
