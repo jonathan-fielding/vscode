@@ -66,12 +66,7 @@ export class VSCodeTouchbar {
 		}
 
 		if (selected === 'workbench.view.debug') {
-
 			buttons.push(this.createDebugBar());
-			// buttons.push(this.createIconButton('/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-step-into.png', 'workbench.action.debug.stepOver'));
-			// buttons.push(this.createIconButton('/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-step-into.png', 'workbench.action.debug.stepInto'));
-			// buttons.push(this.createIconButton('/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-step-into.png', 'workbench.action.debug.stepOut'));
-			// buttons.push(this.createIconButton('/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-step-into.png', 'workbench.action.debug.continue'));
 		}
 
 		return buttons;
