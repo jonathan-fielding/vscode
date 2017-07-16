@@ -21,7 +21,7 @@ import product from 'vs/platform/node/product';
 import { getCommonHTTPHeaders } from 'vs/platform/environment/node/http';
 import { IWindowSettings, MenuBarVisibility, IWindowConfiguration, ReadyState } from 'vs/platform/windows/common/windows';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
-import { VSCodeTouchbar } from 'vs/code/electron-main/touchbar';
+import { CodeTouchbar } from 'vs/code/electron-main/touchbar';
 import { KeyboardLayoutMonitor } from 'vs/code/electron-main/keyboard';
 import { isLinux, isMacintosh, isWindows } from 'vs/base/common/platform';
 import { ICodeWindow } from "vs/platform/windows/electron-main/windows";
@@ -86,7 +86,7 @@ export class CodeWindow implements ICodeWindow {
 	private currentMenuBarVisibility: MenuBarVisibility;
 	private toDispose: IDisposable[];
 	private representedFilename: string;
-	private touchbar: VSCodeTouchbar;
+	private touchbar: CodeTouchbar;
 	private whenReadyCallbacks: TValueCallback<CodeWindow>[];
 
 	private currentConfig: IWindowConfiguration;
@@ -201,7 +201,7 @@ export class CodeWindow implements ICodeWindow {
 
 		// Initalise a touchbar on the window
 		if (isMacintosh) {
-			this.touchbar = new VSCodeTouchbar(this);
+			this.touchbar = new CodeTouchbar(this);
 		}
 
 		this._lastFocusTime = Date.now(); // since we show directly, we need to set the last focus time too
@@ -834,7 +834,6 @@ export class CodeWindow implements ICodeWindow {
 	}
 
 	public send(channel: string, ...args: any[]): void {
-		console.log(channel)
 		this._win.webContents.send(channel, ...args);
 	}
 

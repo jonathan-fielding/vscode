@@ -8,7 +8,10 @@
 import { TouchBar } from 'electron';
 const { TouchBarSegmentedControl, TouchBarButton, TouchBarSpacer } = TouchBar;
 
-export class VSCodeTouchbar {
+// shutup typescript
+declare var __dirname;
+
+export class CodeTouchbar {
 	constructor(
 		private window
 	) {
@@ -45,7 +48,7 @@ export class VSCodeTouchbar {
 		win.setTouchBar(touchBar);
 	}
 
-	private createTouchbarButton(label, action): void {
+	private createTouchbarButton(label, action): TouchBarButton {
 		return new TouchBarButton({
 			label: label,
 			click: () => {
@@ -54,7 +57,7 @@ export class VSCodeTouchbar {
 		});
 	}
 
-	private createIconButton(icon, action): void {
+	private createIconButton(icon, action): TouchBarButton {
 		return new TouchBarButton({
 			icon: icon,
 			click: () => {
@@ -64,7 +67,7 @@ export class VSCodeTouchbar {
 		});
 	}
 
-	private createButtons(selected): void {
+	private createButtons(selected): TouchBarButton[] {
 		let buttons = [];
 
 		if (selected === 'workbench.view.explorer') {
@@ -73,39 +76,39 @@ export class VSCodeTouchbar {
 		}
 
 		if (selected === 'workbench.view.debug') {
-			buttons.push(this.createDebugBar());
+			buttons.push(this.createDebugBar(null));
 		}
 
 		return buttons;
 	}
 
-	private createSpacer(): void {
+	private createSpacer(): TouchBarSpacer {
 		return new TouchBarSpacer({
 			size: 'flexible'
 		});
 	}
 
-	private createActionbarSwitcher(selected): void {
+	private createActionbarSwitcher(selected): TouchBarSegmentedControl {
 		const segments = [
 			{
 				action: 'workbench.view.explorer',
-				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/files-touchbar.png'
+				icon: __dirname + '/../../workbench/parts/touchbar/media/files-touchbar.png'
 			},
 			{
 				action: 'workbench.view.search',
-				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/search-touchbar.png'
+				icon: __dirname + '/../../workbench/parts/touchbar/media/search-touchbar.png'
 			},
 			{
 				action: 'workbench.view.scm',
-				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/git-touchbar.png'
+				icon: __dirname + '/../../workbench/parts/touchbar/media/git-touchbar.png'
 			},
 			{
 				action: 'workbench.view.debug',
-				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-touchbar.png'
+				icon: __dirname + '/../../workbench/parts/touchbar/media/debug-touchbar.png'
 			},
 			{
 				action: 'workbench.view.extensions',
-				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/extensions-touchbar.png'
+				icon: __dirname + '/../../workbench/parts/touchbar/media/extensions-touchbar.png'
 			}
 		];
 
@@ -126,23 +129,23 @@ export class VSCodeTouchbar {
 		});
 	}
 
-	private createDebugBar(selected): void {
+	private createDebugBar(selected): TouchBarSegmentedControl {
 		const segments = [
 			{
 				action: 'workbench.action.debug.stepOver',
-				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-step-over.png'
+				icon: __dirname + '/../../workbench/parts/touchbar/media/debug-step-over.png'
 			},
 			{
 				action: 'workbench.action.debug.stepInto',
-				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-step-into.png'
+				icon: __dirname + '/../../workbench/parts/touchbar/media/debug-step-into.png'
 			},
 			{
 				action: 'workbench.action.debug.stepOut',
-				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-step-out.png'
+				icon: __dirname + '/../../workbench/parts/touchbar/media/debug-step-out.png'
 			},
 			{
 				action: 'workbench.action.debug.continue',
-				icon: '/Users/jonathan/Sites/_opensource/vscode/src/vs/workbench/parts/touchbar/media/debug-continue.png'
+				icon: __dirname + '/../../workbench/parts/touchbar/media/debug-continue.png'
 			}
 		];
 
