@@ -1,3 +1,10 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+'use strict';
+
 import { TouchBar } from 'electron';
 const { TouchBarSegmentedControl, TouchBarButton, TouchBarSpacer } = TouchBar;
 
@@ -31,7 +38,7 @@ export class VSCodeTouchbar {
 		const touchBar = new TouchBar(buttons.concat([
 			this.createSpacer(),
 			actionbar
-		]);
+		]));
 
 		const win = this.window._win;
 
