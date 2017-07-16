@@ -45,6 +45,16 @@ class ImportPatterns extends Lint.RuleWalker {
 		this._validateImport(node.moduleSpecifier.getText(), node);
 	}
 
+	protected visitCallExpression(node: ts.CallExpression): void {
+		super.visitCallExpression(node);
+
+		// import('foo') statements inside the code
+		if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+			const [path] = node.arguments;
+			this._validateImport(path.getText(), node);
+		}
+	}
+
 	private _validateImport(path: string, node: ts.Node): void {
 		// remove quotes
 		path = path.slice(1, -1);
@@ -71,7 +81,7 @@ class ImportPatterns extends Lint.RuleWalker {
 
 		if (!matched) {
 			// None of the restrictions matched
-			this.addFailure(this.createFailure(node.getStart(), node.getWidth(), `Imports violates '${restrictions.join(' or ')}' restrictions.`));
+			this.addFailure(this.createFailure(node.getStart(), node.getWidth(), `Imports violates '${restrictions.join(' or ')}' restrictions. See https://github.com/Microsoft/vscode/wiki/Code-Organization`));
 		}
 	}
 }

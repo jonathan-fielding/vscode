@@ -125,7 +125,7 @@ export default class URI {
 	 */
 	get fsPath() {
 		if (!this._fsPath) {
-			var value: string;
+			let value: string;
 			if (this._authority && this._path && this.scheme === 'file') {
 				// unc path: file://shares/c$/far/boo
 				value = `//${this._authority}${this._path}`;
@@ -218,7 +218,7 @@ export default class URI {
 		ret._scheme = 'file';
 
 		// normalize to fwd-slashes on windows,
-		// on other systems bwd-slaches are valid
+		// on other systems bwd-slashes are valid
 		// filename character, eg /f\oo/ba\r.txt
 		if (platform.isWindows) {
 			path = path.replace(/\\/g, URI._slash);

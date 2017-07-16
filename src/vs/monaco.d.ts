@@ -47,7 +47,7 @@ declare module monaco {
 	 * The value callback to complete a promise
 	 */
 	export interface TValueCallback<T> {
-		(value: T): void;
+		(value: T | Thenable<T>): void;
 	}
 
 
@@ -95,7 +95,7 @@ declare module monaco {
 		public static wrap<ValueType>(value: Thenable<ValueType>): Promise<ValueType>;
 		public static wrap<ValueType>(value: ValueType): Promise<ValueType>;
 
-		public static wrapError<ValueType>(error: any): Promise<ValueType>;
+		public static wrapError<ValueType>(error: Error): Promise<ValueType>;
 	}
 
 	export class CancellationTokenSource {
@@ -981,6 +981,13 @@ declare module monaco.editor {
 		 * To switch a theme, use `monaco.editor.setTheme`
 		 */
 		theme?: string;
+		/**
+		 * An URL to open when Ctrl+H (Windows and Linux) or Cmd+H (OSX) is pressed in
+		 * the accessibility help dialog in the editor.
+		 *
+		 * Defaults to "https://go.microsoft.com/fwlink/?linkid=852450"
+		 */
+		accessibilityHelpUrl?: string;
 	}
 
 	/**
@@ -1050,6 +1057,10 @@ declare module monaco.editor {
 		Auto = 1,
 		Hidden = 2,
 		Visible = 3,
+	}
+
+	export interface ThemeColor {
+		id: string;
 	}
 
 	/**
@@ -2157,10 +2168,6 @@ declare module monaco.editor {
 		 * Restore view state.
 		 */
 		restoreViewState?(state: any): void;
-	}
-
-	export interface ThemeColor {
-		id: string;
 	}
 
 	export interface ICommonCodeEditor extends IEditor {
@@ -4043,7 +4050,7 @@ declare module monaco.languages {
 		/**
 		 * Provide commands for the given document and range.
 		 */
-		provideCodeActions(model: editor.IReadOnlyModel, range: Range, context: CodeActionContext, token: CancellationToken): CodeAction[] | Thenable<CodeAction[]>;
+		provideCodeActions(model: editor.IReadOnlyModel, range: Range, context: CodeActionContext, token: CancellationToken): Command[] | Thenable<Command[]>;
 	}
 
 	/**
@@ -4416,14 +4423,6 @@ declare module monaco.languages {
 		 * to the word range at the position when omitted.
 		 */
 		provideHover(model: editor.IReadOnlyModel, position: Position, token: CancellationToken): Hover | Thenable<Hover>;
-	}
-
-	/**
-	 * Interface used to quick fix typing errors while accesing member fields.
-	 */
-	export interface CodeAction {
-		command: Command;
-		score: number;
 	}
 
 	/**

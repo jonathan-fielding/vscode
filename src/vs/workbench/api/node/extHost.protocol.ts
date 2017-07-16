@@ -45,6 +45,7 @@ import { IRange } from 'vs/editor/common/core/range';
 import { ISelection, Selection } from 'vs/editor/common/core/selection';
 
 import { ITreeItem } from 'vs/workbench/parts/views/common/views';
+import { ThemeColor } from 'vs/platform/theme/common/themeService';
 
 export interface IEnvironment {
 	enableProposedApiForAll: boolean;
@@ -182,6 +183,7 @@ export interface ITextDocumentShowOptions {
 	position?: EditorPosition;
 	preserveFocus?: boolean;
 	pinned?: boolean;
+	selection?: IRange;
 }
 
 export abstract class MainThreadEditorsShape {
@@ -260,7 +262,6 @@ export abstract class MainThreadTerminalServiceShape {
 	$hide(terminalId: number): void { throw ni(); }
 	$sendText(terminalId: number, text: string, addNewLine: boolean): void { throw ni(); }
 	$show(terminalId: number, preserveFocus: boolean): void { throw ni(); }
-	$registerOnData(terminalId: number): void { throw ni(); }
 }
 
 export interface MyQuickPickItems extends IPickOpenEntry {
@@ -274,7 +275,7 @@ export abstract class MainThreadQuickOpenShape {
 }
 
 export abstract class MainThreadStatusBarShape {
-	$setEntry(id: number, extensionId: string, text: string, tooltip: string, command: string, color: string | editorCommon.ThemeColor, alignment: MainThreadStatusBarAlignment, priority: number): void { throw ni(); }
+	$setEntry(id: number, extensionId: string, text: string, tooltip: string, command: string, color: string | ThemeColor, alignment: MainThreadStatusBarAlignment, priority: number): void { throw ni(); }
 	$dispose(id: number) { throw ni(); }
 }
 
@@ -339,6 +340,13 @@ export abstract class MainThreadSCMShape {
 	$unregisterGroup(sourceControlHandle: number, handle: number): void { throw ni(); }
 
 	$setInputBoxValue(value: string): void { throw ni(); }
+}
+
+export type DebugSessionUUID = string;
+
+export abstract class MainThreadDebugServiceShape {
+	$createDebugSession(config: vscode.DebugConfiguration): TPromise<DebugSessionUUID> { throw ni(); }
+	$customDebugAdapterRequest(id: DebugSessionUUID, command: string, args: any): TPromise<any> { throw ni(); }
 }
 
 // -- extension host
@@ -455,7 +463,7 @@ export abstract class ExtHostLanguageFeaturesShape {
 	$provideHover(handle: number, resource: URI, position: IPosition): TPromise<modes.Hover> { throw ni(); }
 	$provideDocumentHighlights(handle: number, resource: URI, position: IPosition): TPromise<modes.DocumentHighlight[]> { throw ni(); }
 	$provideReferences(handle: number, resource: URI, position: IPosition, context: modes.ReferenceContext): TPromise<modes.Location[]> { throw ni(); }
-	$provideCodeActions(handle: number, resource: URI, range: IRange): TPromise<modes.CodeAction[]> { throw ni(); }
+	$provideCodeActions(handle: number, resource: URI, range: IRange): TPromise<modes.Command[]> { throw ni(); }
 	$provideDocumentFormattingEdits(handle: number, resource: URI, options: modes.FormattingOptions): TPromise<editorCommon.ISingleEditOperation[]> { throw ni(); }
 	$provideDocumentRangeFormattingEdits(handle: number, resource: URI, range: IRange, options: modes.FormattingOptions): TPromise<editorCommon.ISingleEditOperation[]> { throw ni(); }
 	$provideOnTypeFormattingEdits(handle: number, resource: URI, position: IPosition, ch: string, options: modes.FormattingOptions): TPromise<editorCommon.ISingleEditOperation[]> { throw ni(); }
@@ -477,7 +485,6 @@ export abstract class ExtHostQuickOpenShape {
 export abstract class ExtHostTerminalServiceShape {
 	$acceptTerminalClosed(id: number): void { throw ni(); }
 	$acceptTerminalProcessId(id: number, processId: number): void { throw ni(); }
-	$acceptTerminalData(id: number, data: string): void { throw ni(); }
 }
 
 export abstract class ExtHostSCMShape {
@@ -491,11 +498,18 @@ export abstract class ExtHostTaskShape {
 	$provideTasks(handle: number): TPromise<TaskSet> { throw ni(); }
 }
 
+export abstract class ExtHostDebugServiceShape {
+	$acceptDebugSessionTerminated(id: DebugSessionUUID, type: string, name: string): void { throw ni(); }
+	$acceptDebugSessionActiveChanged(id: DebugSessionUUID | undefined, type?: string, name?: string): void { throw ni(); }
+	$acceptDebugSessionCustomEvent(id: DebugSessionUUID, type: string, name: string, event: any): void { throw ni(); }
+}
+
 // --- proxy identifiers
 
 export const MainContext = {
 	MainThreadCommands: createMainId<MainThreadCommandsShape>('MainThreadCommands', MainThreadCommandsShape),
 	MainThreadConfiguration: createMainId<MainThreadConfigurationShape>('MainThreadConfiguration', MainThreadConfigurationShape),
+	MainThreadDebugService: createMainId<MainThreadDebugServiceShape>('MainThreadDebugService', MainThreadDebugServiceShape),
 	MainThreadDiagnostics: createMainId<MainThreadDiagnosticsShape>('MainThreadDiagnostics', MainThreadDiagnosticsShape),
 	MainThreadDocuments: createMainId<MainThreadDocumentsShape>('MainThreadDocuments', MainThreadDocumentsShape),
 	MainThreadEditors: createMainId<MainThreadEditorsShape>('MainThreadEditors', MainThreadEditorsShape),
@@ -521,6 +535,7 @@ export const ExtHostContext = {
 	ExtHostCommands: createExtId<ExtHostCommandsShape>('ExtHostCommands', ExtHostCommandsShape),
 	ExtHostConfiguration: createExtId<ExtHostConfigurationShape>('ExtHostConfiguration', ExtHostConfigurationShape),
 	ExtHostDiagnostics: createExtId<ExtHostDiagnosticsShape>('ExtHostDiagnostics', ExtHostDiagnosticsShape),
+	ExtHostDebugService: createExtId<ExtHostDebugServiceShape>('ExtHostDebugService', ExtHostDebugServiceShape),
 	ExtHostDocumentsAndEditors: createExtId<ExtHostDocumentsAndEditorsShape>('ExtHostDocumentsAndEditors', ExtHostDocumentsAndEditorsShape),
 	ExtHostDocuments: createExtId<ExtHostDocumentsShape>('ExtHostDocuments', ExtHostDocumentsShape),
 	ExtHostDocumentSaveParticipant: createExtId<ExtHostDocumentSaveParticipantShape>('ExtHostDocumentSaveParticipant', ExtHostDocumentSaveParticipantShape),

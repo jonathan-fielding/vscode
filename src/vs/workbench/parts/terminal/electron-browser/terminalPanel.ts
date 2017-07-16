@@ -16,9 +16,10 @@ import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { ITerminalService, ITerminalFont, TERMINAL_PANEL_ID } from 'vs/workbench/parts/terminal/common/terminal';
 import { IThemeService, ITheme } from 'vs/platform/theme/common/themeService';
 import { TerminalFindWidget } from './terminalFindWidget';
-import { ansiColorIdentifiers, TERMINAL_BACKGROUND_COLOR, TERMINAL_FOREGROUND_COLOR } from './terminalColorRegistry';
-import { ColorIdentifier, selectionBackground } from 'vs/platform/theme/common/colorRegistry';
-import { KillTerminalAction, CreateNewTerminalAction, SwitchTerminalInstanceAction, SwitchTerminalInstanceActionItem, CopyTerminalSelectionAction, TerminalPasteAction, ClearTerminalAction } from 'vs/workbench/parts/terminal/electron-browser/terminalActions';
+import { ansiColorIdentifiers, TERMINAL_BACKGROUND_COLOR, TERMINAL_FOREGROUND_COLOR, TERMINAL_CURSOR_FOREGROUND_COLOR, TERMINAL_CURSOR_BACKGROUND_COLOR } from './terminalColorRegistry';
+import { ColorIdentifier, editorHoverBackground, editorHoverBorder, editorForeground } from 'vs/platform/theme/common/colorRegistry';
+import { PANEL_BACKGROUND } from 'vs/workbench/common/theme';
+import { KillTerminalAction, CreateNewTerminalAction, SwitchTerminalInstanceAction, SwitchTerminalInstanceActionItem, CopyTerminalSelectionAction, TerminalPasteAction, ClearTerminalAction, SelectAllTerminalAction } from 'vs/workbench/parts/terminal/electron-browser/terminalActions';
 import { Panel } from 'vs/workbench/browser/panel';
 import { StandardMouseEvent } from 'vs/base/browser/mouseEvent';
 import { TPromise } from 'vs/base/common/winjs.base';
@@ -59,7 +60,7 @@ export class TerminalPanel extends Panel {
 		this._terminalContainer = document.createElement('div');
 		dom.addClass(this._terminalContainer, 'terminal-outer-container');
 
-		this._findWidget = new TerminalFindWidget(this._contextViewService, this._terminalService);
+		this._findWidget = this._instantiationService.createInstance(TerminalFindWidget);
 
 		this._parentDomElement.appendChild(this._themeStyleElement);
 		this._parentDomElement.appendChild(this._fontStyleElement);
@@ -130,6 +131,7 @@ export class TerminalPanel extends Panel {
 				new Separator(),
 				this._copyContextMenuAction,
 				this._instantiationService.createInstance(TerminalPasteAction, TerminalPasteAction.ID, nls.localize('paste', "Paste")),
+				this._instantiationService.createInstance(SelectAllTerminalAction, SelectAllTerminalAction.ID, nls.localize('selectAll', "Select All")),
 				new Separator(),
 				this._instantiationService.createInstance(ClearTerminalAction, ClearTerminalAction.ID, nls.localize('clear', "Clear"))
 			];
@@ -137,7 +139,8 @@ export class TerminalPanel extends Panel {
 				this._register(a);
 			});
 		}
-		this._copyContextMenuAction.enabled = document.activeElement.classList.contains('xterm') && window.getSelection().toString().length > 0;
+		const activeInstance = this._terminalService.getActiveInstance();
+		this._copyContextMenuAction.enabled = activeInstance && activeInstance.hasSelection();
 		return this._contextMenuActions;
 	}
 
@@ -157,7 +160,12 @@ export class TerminalPanel extends Panel {
 	}
 
 	public focusFindWidget() {
-		this._findWidget.reveal();
+		const activeInstance = this._terminalService.getActiveInstance();
+		if (activeInstance && activeInstance.hasSelection()) {
+			this._findWidget.reveal(activeInstance.selection);
+		} else {
+			this._findWidget.reveal();
+		}
 	}
 
 	public hideFindWidget() {
@@ -244,7 +252,7 @@ export class TerminalPanel extends Panel {
 				}
 
 				const terminal = this._terminalService.getActiveInstance();
-				terminal.sendText(this._preparePathForTerminal(uri), false);
+				terminal.sendText(TerminalPanel.preparePathForTerminal(uri), false);
 			}
 		}));
 	}
@@ -268,22 +276,43 @@ export class TerminalPanel extends Panel {
 		}
 		const fgColor = theme.getColor(TERMINAL_FOREGROUND_COLOR);
 		if (fgColor) {
-			css += `.monaco-workbench .panel.integrated-terminal .xterm { color: ${fgColor}; }` +
-				`.monaco-workbench .panel.integrated-terminal .xterm:not(.xterm-cursor-style-underline):not(.xterm-cursor-style-bar).focus .terminal-cursor,` +
-				`.monaco-workbench .panel.integrated-terminal .xterm:not(.xterm-cursor-style-underline):not(.xterm-cursor-style-bar):focus .terminal-cursor { background-color: ${fgColor} }` +
-				`.monaco-workbench .panel.integrated-terminal .xterm:not(.focus):not(:focus) .terminal-cursor { outline-color: ${fgColor}; }` +
-				`.monaco-workbench .panel.integrated-terminal .xterm.xterm-cursor-style-bar .terminal-cursor::before,` +
-				`.monaco-workbench .panel.integrated-terminal .xterm.xterm-cursor-style-underline .terminal-cursor::before { background-color: ${fgColor}; }` +
-				`.monaco-workbench .panel.integrated-terminal .xterm.xterm-cursor-style-bar.focus.xterm-cursor-blink .terminal-cursor::before,` +
-				`.monaco-workbench .panel.integrated-terminal .xterm.xterm-cursor-style-underline.focus.xterm-cursor-blink .terminal-cursor::before { background-color: ${fgColor}; }`;
+			css += `.monaco-workbench .panel.integrated-terminal .xterm { color: ${fgColor}; }`;
 		}
-		// Use selection.background as the terminal selection, this is temporary
-		// until proper color inverting is implemented to ensure contrast.
-		const selectionColor = theme.getColor(selectionBackground);
-		if (selectionColor) {
-			// selection.background is set to null when not defined by the
-			// theme, as such it's default values are defined in CSS.
-			css += `.monaco-workbench .panel.integrated-terminal .xterm .xterm-selection div { background-color: ${selectionColor} !important; }`;
+
+		const cursorFgColor = theme.getColor(TERMINAL_CURSOR_FOREGROUND_COLOR) || fgColor;
+		if (cursorFgColor) {
+			css += `.monaco-workbench .panel.integrated-terminal .xterm:not(.xterm-cursor-style-underline):not(.xterm-cursor-style-bar).focus .terminal-cursor,` +
+				`.monaco-workbench .panel.integrated-terminal .xterm:not(.xterm-cursor-style-underline):not(.xterm-cursor-style-bar):focus .terminal-cursor { background-color: ${cursorFgColor} }` +
+				`.monaco-workbench .panel.integrated-terminal .xterm:not(.focus):not(:focus) .terminal-cursor { outline-color: ${cursorFgColor}; }` +
+				`.monaco-workbench .panel.integrated-terminal .xterm.xterm-cursor-style-bar .terminal-cursor::before,` +
+				`.monaco-workbench .panel.integrated-terminal .xterm.xterm-cursor-style-underline .terminal-cursor::before { background-color: ${cursorFgColor}; }` +
+				`.monaco-workbench .panel.integrated-terminal .xterm.xterm-cursor-style-bar.focus.xterm-cursor-blink .terminal-cursor::before,` +
+				`.monaco-workbench .panel.integrated-terminal .xterm.xterm-cursor-style-underline.focus.xterm-cursor-blink .terminal-cursor::before { background-color: ${cursorFgColor}; }`;
+		}
+
+		const cursorBgColor = theme.getColor(TERMINAL_CURSOR_BACKGROUND_COLOR) || bgColor || theme.getColor(PANEL_BACKGROUND);
+		if (cursorBgColor) {
+			css += `.monaco-workbench .panel.integrated-terminal .xterm:not(.xterm-cursor-style-underline):not(.xterm-cursor-style-bar).focus .terminal-cursor,` +
+				`.monaco-workbench .panel.integrated-terminal .xterm:not(.xterm-cursor-style-underline):not(.xterm-cursor-style-bar):focus .terminal-cursor { color: ${cursorBgColor} }`;
+		}
+
+		// TODO: Reinstate, see #28397
+		// const selectionColor = theme.getColor(TERMINAL_SELECTION_BACKGROUND_COLOR);
+		// if (selectionColor) {
+		// 	css += `.monaco-workbench .panel.integrated-terminal .xterm .xterm-selection div { background-color: ${selectionColor}; }`;
+		// }
+		// Borrow the editor's hover background for now
+		let hoverBackground = theme.getColor(editorHoverBackground);
+		if (hoverBackground) {
+			css += `.monaco-workbench .panel.integrated-terminal .terminal-message-widget { background-color: ${hoverBackground}; }`;
+		}
+		let hoverBorder = theme.getColor(editorHoverBorder);
+		if (hoverBorder) {
+			css += `.monaco-workbench .panel.integrated-terminal .terminal-message-widget { border: 1px solid ${hoverBorder}; }`;
+		}
+		let hoverForeground = theme.getColor(editorForeground);
+		if (hoverForeground) {
+			css += `.monaco-workbench .panel.integrated-terminal .terminal-message-widget { color: ${hoverForeground}; }`;
 		}
 
 		this._themeStyleElement.innerHTML = css;
@@ -319,7 +348,7 @@ export class TerminalPanel extends Panel {
 	/**
 	 * Adds quotes to a path if it contains whitespaces
 	 */
-	private _preparePathForTerminal(path: string) {
+	public static preparePathForTerminal(path: string): string {
 		if (platform.isWindows) {
 			if (/\s+/.test(path)) {
 				return `"${path}"`;

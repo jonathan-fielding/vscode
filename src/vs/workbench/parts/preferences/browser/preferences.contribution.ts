@@ -6,7 +6,7 @@
 
 import * as nls from 'vs/nls';
 import URI from 'vs/base/common/uri';
-import { Registry } from 'vs/platform/platform';
+import { Registry } from 'vs/platform/registry/common/platform';
 import { KeybindingsRegistry } from 'vs/platform/keybinding/common/keybindingsRegistry';
 import { IWorkbenchActionRegistry, Extensions } from 'vs/workbench/common/actionRegistry';
 import { EditorInput, IEditorRegistry, Extensions as EditorExtensions, IEditorInputFactory } from 'vs/workbench/common/editor';
@@ -19,8 +19,8 @@ import { DefaultPreferencesEditorInput, PreferencesEditor, PreferencesEditorInpu
 import { KeybindingsEditor, KeybindingsEditorInput } from 'vs/workbench/parts/preferences/browser/keybindingsEditor';
 import { OpenGlobalSettingsAction, OpenGlobalKeybindingsAction, OpenGlobalKeybindingsFileAction, OpenWorkspaceSettingsAction, ConfigureLanguageBasedSettingsAction } from 'vs/workbench/parts/preferences/browser/preferencesActions';
 import {
-	IPreferencesService, IKeybindingsEditor, CONTEXT_KEYBINDING_FOCUS, CONTEXT_KEYBINDINGS_EDITOR, KEYBINDINGS_EDITOR_COMMAND_DEFINE, KEYBINDINGS_EDITOR_COMMAND_REMOVE, KEYBINDINGS_EDITOR_COMMAND_SEARCH,
-	KEYBINDINGS_EDITOR_COMMAND_COPY, KEYBINDINGS_EDITOR_COMMAND_RESET, KEYBINDINGS_EDITOR_COMMAND_SHOW_CONFLICTS
+	IPreferencesService, IKeybindingsEditor, CONTEXT_KEYBINDING_FOCUS, CONTEXT_KEYBINDINGS_EDITOR, CONTEXT_KEYBINDINGS_SEARCH_FOCUS, KEYBINDINGS_EDITOR_COMMAND_DEFINE, KEYBINDINGS_EDITOR_COMMAND_REMOVE, KEYBINDINGS_EDITOR_COMMAND_SEARCH,
+	KEYBINDINGS_EDITOR_COMMAND_COPY, KEYBINDINGS_EDITOR_COMMAND_RESET, KEYBINDINGS_EDITOR_COMMAND_SHOW_CONFLICTS, KEYBINDINGS_EDITOR_COMMAND_FOCUS_KEYBINDINGS
 } from 'vs/workbench/parts/preferences/common/preferences';
 import { PreferencesService } from 'vs/workbench/parts/preferences/browser/preferencesService';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
@@ -231,6 +231,17 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 	handler: (accessor, args: any) => {
 		const editor = accessor.get(IWorkbenchEditorService).getActiveEditor() as IKeybindingsEditor;
 		editor.copyKeybinding(editor.activeKeybindingEntry);
+	}
+});
+
+KeybindingsRegistry.registerCommandAndKeybindingRule({
+	id: KEYBINDINGS_EDITOR_COMMAND_FOCUS_KEYBINDINGS,
+	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(),
+	when: ContextKeyExpr.and(CONTEXT_KEYBINDINGS_EDITOR, CONTEXT_KEYBINDINGS_SEARCH_FOCUS),
+	primary: KeyCode.DownArrow,
+	handler: (accessor, args: any) => {
+		const editor = accessor.get(IWorkbenchEditorService).getActiveEditor() as IKeybindingsEditor;
+		editor.focusKeybindings();
 	}
 });
 

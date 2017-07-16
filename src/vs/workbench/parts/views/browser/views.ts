@@ -5,7 +5,7 @@
 
 import * as nls from 'vs/nls';
 import { TPromise } from 'vs/base/common/winjs.base';
-import { IThemable, attachHeaderViewStyler } from 'vs/platform/theme/common/styler';
+import { IThemable, attachStyler } from 'vs/platform/theme/common/styler';
 import * as errors from 'vs/base/common/errors';
 import * as DOM from 'vs/base/browser/dom';
 import { $, Dimension, Builder } from 'vs/base/browser/builder';
@@ -13,11 +13,13 @@ import { Scope } from 'vs/workbench/common/memento';
 import { dispose, IDisposable } from 'vs/base/common/lifecycle';
 import { IAction, IActionRunner } from 'vs/base/common/actions';
 import { IActionItem, ActionsOrientation } from 'vs/base/browser/ui/actionbar/actionbar';
+import { Registry } from 'vs/platform/registry/common/platform';
 import { prepareActions } from 'vs/workbench/browser/actions';
-import { Viewlet } from 'vs/workbench/browser/viewlet';
+import { Viewlet, ViewletRegistry, Extensions } from 'vs/workbench/browser/viewlet';
 import { ITree } from 'vs/base/parts/tree/browser/tree';
 import { DelayedDragHandler } from 'vs/base/browser/dnd';
 import { ToolBar } from 'vs/base/browser/ui/toolbar/toolbar';
+import { IExtensionService } from 'vs/platform/extensions/common/extensions';
 import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
 import { IContextMenuService } from 'vs/platform/contextview/browser/contextView';
 import { AbstractCollapsibleView, CollapsibleState, IView as IBaseView, SplitView, ViewSizing } from 'vs/base/browser/ui/splitview/splitview';
@@ -28,6 +30,9 @@ import { IInstantiationService } from 'vs/platform/instantiation/common/instanti
 import { IStorageService, StorageScope } from 'vs/platform/storage/common/storage';
 import { IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
+import { StandardMouseEvent } from 'vs/base/browser/mouseEvent';
+import { SIDE_BAR_DRAG_AND_DROP_BACKGROUND, SIDE_BAR_SECTION_HEADER_FOREGROUND, SIDE_BAR_SECTION_HEADER_BACKGROUND } from 'vs/workbench/common/theme';
+import { contrastBorder } from 'vs/platform/theme/common/colorRegistry';
 
 export interface IViewOptions {
 
@@ -43,7 +48,7 @@ export interface IViewOptions {
 
 export interface IViewConstructorSignature {
 
-	new (options: IViewOptions, ...services: { _serviceBrand: any; }[]): IView;
+	new(options: IViewOptions, ...services: { _serviceBrand: any; }[]): IView;
 
 }
 
@@ -53,9 +58,13 @@ export interface IView extends IBaseView, IThemable {
 
 	name: string;
 
+	getHeaderElement(): HTMLElement;
+
 	create(): TPromise<void>;
 
 	setVisible(visible: boolean): TPromise<void>;
+
+	isVisible(): boolean;
 
 	getActions(): IAction[];
 
@@ -82,6 +91,8 @@ export interface IView extends IBaseView, IThemable {
 
 export interface ICollapsibleViewOptions extends IViewOptions {
 
+	ariaHeaderLabel?: string;
+
 	sizing: ViewSizing;
 
 	initialBodySize?: number;
@@ -96,10 +107,11 @@ export abstract class CollapsibleView extends AbstractCollapsibleView implements
 	protected treeContainer: HTMLElement;
 	protected tree: ITree;
 	protected toDispose: IDisposable[];
-	protected isVisible: boolean;
 	protected toolBar: ToolBar;
 	protected actionRunner: IActionRunner;
 	protected isDisposed: boolean;
+
+	private _isVisible: boolean;
 
 	private dragHandler: DelayedDragHandler;
 
@@ -109,7 +121,7 @@ export abstract class CollapsibleView extends AbstractCollapsibleView implements
 		protected contextMenuService: IContextMenuService
 	) {
 		super({
-			ariaHeaderLabel: options.name,
+			ariaHeaderLabel: options.ariaHeaderLabel,
 			sizing: options.sizing,
 			bodySize: options.initialBodySize ? options.initialBodySize : 4 * 22,
 			initialState: options.collapsed ? CollapsibleState.COLLAPSED : CollapsibleState.EXPANDED,
@@ -127,8 +139,14 @@ export abstract class CollapsibleView extends AbstractCollapsibleView implements
 		super.changeState(state);
 	}
 
+	get draggableLabel(): string { return this.name; }
+
 	public create(): TPromise<void> {
 		return TPromise.as(null);
+	}
+
+	getHeaderElement(): HTMLElement {
+		return this.header;
 	}
 
 	public renderHeader(container: HTMLElement): void {
@@ -166,9 +184,13 @@ export abstract class CollapsibleView extends AbstractCollapsibleView implements
 		return this.tree;
 	}
 
+	public isVisible(): boolean {
+		return this._isVisible;
+	}
+
 	public setVisible(visible: boolean): TPromise<void> {
-		if (this.isVisible !== visible) {
-			this.isVisible = visible;
+		if (this._isVisible !== visible) {
+			this._isVisible = visible;
 			this.updateTreeVisibility(this.tree, visible && this.state === CollapsibleState.EXPANDED);
 		}
 
@@ -188,8 +210,10 @@ export abstract class CollapsibleView extends AbstractCollapsibleView implements
 	}
 
 	public layoutBody(size: number): void {
-		this.treeContainer.style.height = size + 'px';
-		this.tree.layout(size);
+		if (this.tree) {
+			this.treeContainer.style.height = size + 'px';
+			this.tree.layout(size);
+		}
 	}
 
 	public getActions(): IAction[] {
@@ -269,7 +293,7 @@ export abstract class CollapsibleView extends AbstractCollapsibleView implements
 
 export interface IViewletViewOptions extends IViewOptions {
 
-	viewletSettings: any;
+	viewletSettings: object;
 
 }
 
@@ -279,6 +303,10 @@ interface IViewState {
 
 	size: number;
 
+	isHidden: boolean;
+
+	order: number;
+
 }
 
 export class ComposedViewsViewlet extends Viewlet {
@@ -287,66 +315,102 @@ export class ComposedViewsViewlet extends Viewlet {
 	protected lastFocusedView: IView;
 
 	private splitView: SplitView;
-	protected views: IView[];
+	private viewHeaderContextMenuListeners: IDisposable[] = [];
 	private dimension: Dimension;
-	private viewletSettings: any;
+	private viewletSettings: object;
 
 	private readonly viewsContextKeys: Set<string> = new Set<string>();
 	private readonly viewsStates: Map<string, IViewState>;
+	private areExtensionsReady: boolean = false;
 
 	constructor(
 		id: string,
 		private location: ViewLocation,
 		private viewletStateStorageId: string,
+		private showHeaderInTitleWhenSingleView: boolean,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IStorageService protected storageService: IStorageService,
 		@IInstantiationService protected instantiationService: IInstantiationService,
 		@IThemeService themeService: IThemeService,
 		@IWorkspaceContextService protected contextService: IWorkspaceContextService,
-		@IContextKeyService protected contextKeyService: IContextKeyService
+		@IContextKeyService protected contextKeyService: IContextKeyService,
+		@IContextMenuService private contextMenuService: IContextMenuService,
+		@IExtensionService extensionService: IExtensionService
 	) {
 		super(id, telemetryService, themeService);
 
-		this.views = [];
 		this.viewletSettings = this.getMemento(storageService, Scope.WORKSPACE);
 		this.viewsStates = this.loadViewsStates();
 
 		this._register(ViewsRegistry.onViewsRegistered(() => this.onViewDescriptorsChanged()));
 		this._register(ViewsRegistry.onViewsDeregistered(() => this.onViewDescriptorsChanged()));
 		this._register(contextKeyService.onDidChangeContext(keys => this.onContextChanged(keys)));
+
+		extensionService.onReady().then(() => {
+			this.areExtensionsReady = true;
+			this.onViewsUpdated();
+		});
 	}
 
 	public create(parent: Builder): TPromise<void> {
 		super.create(parent);
 
 		this.viewletContainer = DOM.append(parent.getHTMLElement(), DOM.$(''));
-		this.splitView = this._register(new SplitView(this.viewletContainer));
+		this.splitView = this._register(new SplitView(this.viewletContainer, { canChangeOrderByDragAndDrop: true }));
+		this.attachSplitViewStyler(this.splitView);
 		this._register(this.splitView.onFocus((view: IView) => this.lastFocusedView = view));
+		this._register(this.splitView.onDidOrderChange(() => {
+			const views = this.splitView.getViews<IView>();
+			for (let order = 0; order < views.length; order++) {
+				this.viewsStates.get(views[order].id).order = order;
+			}
+		}));
 
 		return this.onViewDescriptorsChanged()
 			.then(() => {
-				this.lastFocusedView = this.views[0];
+				this.lastFocusedView = this.splitView.getViews<IView>()[0];
 				this.focus();
 			});
 	}
 
+	public getTitle(): string {
+		let title = Registry.as<ViewletRegistry>(Extensions.Viewlets).getViewlet(this.getId()).name;
+		if (this.showHeaderInTitleArea() && this.splitView.getViews<IView>()[0]) {
+			title += ': ' + this.splitView.getViews<IView>()[0].name;
+		}
+		return title;
+	}
+
 	public getActions(): IAction[] {
-		if (this.views.length === 1) {
-			return this.views[0].getActions();
+		if (this.showHeaderInTitleArea() && this.splitView.getViews<IView>()[0]) {
+			return this.splitView.getViews<IView>()[0].getActions();
 		}
 		return [];
 	}
 
 	public getSecondaryActions(): IAction[] {
-		if (this.views.length === 1) {
-			return this.views[0].getSecondaryActions();
+		if (this.showHeaderInTitleArea() && this.splitView.getViews<IView>()[0]) {
+			return this.splitView.getViews<IView>()[0].getSecondaryActions();
 		}
 		return [];
 	}
 
+	public getContextMenuActions(): IAction[] {
+		return this.getViewDescriptorsFromRegistry(true)
+			.filter(viewDescriptor => viewDescriptor.canToggleVisibility)
+			.map(viewDescriptor => (<IAction>{
+				id: `${viewDescriptor.id}.toggleVisibility`,
+				label: viewDescriptor.name,
+				checked: this.isCurrentlyVisible(viewDescriptor),
+				enabled: this.contextKeyService.contextMatchesRules(viewDescriptor.when),
+				run: () => this.toggleViewVisibility(viewDescriptor.id)
+			}));
+	}
+
 	public setVisible(visible: boolean): TPromise<void> {
 		return super.setVisible(visible)
-			.then(() => TPromise.join(this.views.map((view) => view.setVisible(visible))))
+			.then(() => TPromise.join(this.splitView.getViews<IView>().filter(view => view.isVisible() !== visible)
+				.map((view) => view.setVisible(visible))))
 			.then(() => void 0);
 	}
 
@@ -359,26 +423,46 @@ export class ComposedViewsViewlet extends Viewlet {
 
 	public layout(dimension: Dimension): void {
 		this.dimension = dimension;
-		this.splitView.layout(dimension.height);
-		for (const view of this.views) {
-			let viewState = this.createViewState(view);
-			this.viewsStates.set(view.id, viewState);
-		}
+		this.layoutViews();
 	}
 
 	public getOptimalWidth(): number {
 		const additionalMargin = 16;
-		const optimalWidth = Math.max(...this.views.map(view => view.getOptimalWidth() || 0));
+		const optimalWidth = Math.max(...this.splitView.getViews<IView>().map(view => view.getOptimalWidth() || 0));
 		return optimalWidth + additionalMargin;
 	}
 
 	public shutdown(): void {
 		this.saveViewsStates();
-		this.views.forEach((view) => view.shutdown());
+		this.splitView.getViews<IView>().forEach((view) => view.shutdown());
 		super.shutdown();
 	}
 
-	private onViewDescriptorsChanged(): TPromise<void> {
+	private layoutViews(): void {
+		if (this.splitView) {
+			this.splitView.layout(this.dimension.height);
+			for (const view of this.splitView.getViews<IView>()) {
+				let viewState = this.updateViewStateSize(view);
+				this.viewsStates.set(view.id, viewState);
+			}
+		}
+	}
+
+	private toggleViewVisibility(id: string): void {
+		const view = this.getView(id);
+		let viewState = this.viewsStates.get(id);
+		if (view) {
+			viewState = viewState || this.createViewState(view);
+			viewState.isHidden = true;
+		} else {
+			viewState = viewState || { collapsed: true, size: void 0, isHidden: false, order: void 0 };
+			viewState.isHidden = false;
+		}
+		this.viewsStates.set(id, viewState);
+		this.updateViews();
+	}
+
+	private onViewDescriptorsChanged(): TPromise<any> {
 		this.viewsContextKeys.clear();
 		for (const viewDescriptor of this.getViewDescriptorsFromRegistry()) {
 			if (viewDescriptor.when) {
@@ -391,6 +475,10 @@ export class ComposedViewsViewlet extends Viewlet {
 	}
 
 	private onContextChanged(keys: string[]): void {
+		if (!keys) {
+			return;
+		}
+
 		let hasToUpdate: boolean = false;
 		for (const key of keys) {
 			if (this.viewsContextKeys.has(key)) {
@@ -404,122 +492,206 @@ export class ComposedViewsViewlet extends Viewlet {
 		}
 	}
 
-	private updateViews(): TPromise<void> {
+	protected updateViews(): TPromise<IView[]> {
+		if (this.splitView) {
 
-		if (!this.splitView) {
-			return TPromise.as(null);
-		}
+			const registeredViews = this.getViewDescriptorsFromRegistry();
+			const [visible, toAdd, toRemove] = registeredViews.reduce<[IViewDescriptor[], IViewDescriptor[], IViewDescriptor[]]>((result, viewDescriptor) => {
+				const isCurrentlyVisible = this.isCurrentlyVisible(viewDescriptor);
+				const canBeVisible = this.canBeVisible(viewDescriptor);
 
-		const registeredViews = this.getViewDescriptorsFromRegistry();
-		const [visible, toAdd, toRemove] = registeredViews.reduce<[IViewDescriptor[], IViewDescriptor[], IViewDescriptor[]]>((result, viewDescriptor) => {
-			const isCurrentlyVisible = !!this.getView(viewDescriptor.id);
-			const canBeVisible = this.canBeVisible(viewDescriptor);
+				if (canBeVisible) {
+					result[0].push(viewDescriptor);
+				}
 
-			if (canBeVisible) {
-				result[0].push(viewDescriptor);
+				if (!isCurrentlyVisible && canBeVisible) {
+					result[1].push(viewDescriptor);
+				}
+
+				if (isCurrentlyVisible && !canBeVisible) {
+					result[2].push(viewDescriptor);
+				}
+
+				return result;
+
+			}, [[], [], []]);
+
+			const toCreate = [];
+
+			if (toAdd.length || toRemove.length) {
+				for (const view of this.splitView.getViews<IView>()) {
+					let viewState = this.viewsStates.get(view.id);
+					if (!viewState || view.size !== viewState.size || !view.isExpanded() !== viewState.collapsed) {
+						viewState = this.updateViewStateSize(view);
+						this.viewsStates.set(view.id, viewState);
+						this.splitView.updateWeight(view, viewState.size);
+					}
+				}
+				if (toRemove.length) {
+					for (const viewDescriptor of toRemove) {
+						let view = this.getView(viewDescriptor.id);
+						this.splitView.removeView(view);
+						if (this.lastFocusedView === view) {
+							this.lastFocusedView = null;
+						}
+					}
+				}
+
+				for (const viewDescriptor of toAdd) {
+					let viewState = this.viewsStates.get(viewDescriptor.id);
+					let index = visible.indexOf(viewDescriptor);
+					const view = this.createView(viewDescriptor, {
+						id: viewDescriptor.id,
+						name: viewDescriptor.name,
+						actionRunner: this.getActionRunner(),
+						collapsed: viewState ? viewState.collapsed : void 0,
+						viewletSettings: this.viewletSettings
+					});
+					toCreate.push(view);
+
+					this.attachViewStyler(view);
+					this.splitView.addView(view, viewState && viewState.size ? Math.max(viewState.size, 1) : viewDescriptor.size, index);
+				}
+
+				return TPromise.join(toCreate.map(view => view.create()))
+					.then(() => this.onViewsUpdated())
+					.then(() => toCreate);
 			}
-
-			if (!isCurrentlyVisible && canBeVisible) {
-				result[1].push(viewDescriptor);
-			}
-
-			if (isCurrentlyVisible && !canBeVisible) {
-				result[2].push(viewDescriptor);
-			}
-
-			return result;
-
-		}, [[], [], []]);
-
-		if (!toAdd.length && !toRemove.length) {
-			return TPromise.as(null);
 		}
+		return TPromise.as([]);
+	}
 
-		for (const view of this.views) {
-			let viewState = this.viewsStates.get(view.id);
-			if (!viewState || view.size !== viewState.size || !view.isExpanded() !== viewState.collapsed) {
-				viewState = this.createViewState(view);
-				this.viewsStates.set(view.id, viewState);
-				this.splitView.updateWeight(view, viewState.size);
-			}
-		}
+	private attachViewStyler(widget: IThemable, options?: { noContrastBorder?: boolean }): IDisposable {
+		return attachStyler(this.themeService, {
+			headerForeground: SIDE_BAR_SECTION_HEADER_FOREGROUND,
+			headerBackground: SIDE_BAR_SECTION_HEADER_BACKGROUND,
+			headerHighContrastBorder: (options && options.noContrastBorder) ? null : contrastBorder
+		}, widget);
+	}
 
-		if (toRemove.length) {
-			for (const viewDescriptor of toRemove) {
-				let view = this.getView(viewDescriptor.id);
-				this.views.splice(this.views.indexOf(view), 1);
-				this.splitView.removeView(view);
-			}
-		}
+	private attachSplitViewStyler(widget: IThemable): IDisposable {
+		return attachStyler(this.themeService, {
+			dropBackground: SIDE_BAR_DRAG_AND_DROP_BACKGROUND
+		}, widget);
+	}
 
-		const toCreate = [];
-
-		for (const viewDescriptor of toAdd) {
-			let viewState = this.viewsStates.get(viewDescriptor.id);
-			let index = visible.indexOf(viewDescriptor);
-			const view = this.createView(viewDescriptor, {
-				id: viewDescriptor.id,
-				name: viewDescriptor.name,
-				actionRunner: this.getActionRunner(),
-				collapsed: viewState ? viewState.collapsed : void 0,
-				viewletSettings: this.viewletSettings
-			});
-			toCreate.push(view);
-
-			this.views.splice(index, 0, view);
-			attachHeaderViewStyler(view, this.themeService);
-			this.splitView.addView(view, viewState && viewState.size ? Math.max(viewState.size, 1) : viewDescriptor.size, index);
-		}
-
-		return TPromise.join(toCreate.map(view => view.create()))
-			.then(() => this.onViewsUpdated());
+	private isCurrentlyVisible(viewDescriptor: IViewDescriptor): boolean {
+		return !!this.getView(viewDescriptor.id);
 	}
 
 	private canBeVisible(viewDescriptor: IViewDescriptor): boolean {
+		const viewstate = this.viewsStates.get(viewDescriptor.id);
+		if (viewstate && viewstate.isHidden) {
+			return false;
+		}
 		return this.contextKeyService.contextMatchesRules(viewDescriptor.when);
 	}
 
 	private onViewsUpdated(): TPromise<void> {
-		if (this.views.length === 1) {
-			this.views[0].hideHeader();
-			if (!this.views[0].isExpanded()) {
-				this.views[0].expand();
-			}
-		} else {
-			for (const view of this.views) {
-				view.showHeader();
-			}
+		if (!this.splitView) {
+			return TPromise.as(null);
 		}
 
-		if (this.dimension) {
-			this.layout(this.dimension);
+		if (this.showHeaderInTitleArea()) {
+			if (this.splitView.getViews<IView>()[0]) {
+				this.splitView.getViews<IView>()[0].hideHeader();
+				if (!this.splitView.getViews<IView>()[0].isExpanded()) {
+					this.splitView.getViews<IView>()[0].expand();
+				}
+			}
+		} else {
+			for (const view of this.splitView.getViews<IView>()) {
+				view.showHeader();
+			}
 		}
 
 		// Update title area since the title actions have changed.
 		this.updateTitleArea();
 
+		this.viewHeaderContextMenuListeners = dispose(this.viewHeaderContextMenuListeners);
+		for (const viewDescriptor of this.getViewDescriptorsFromRegistry()) {
+			const view = this.getView(viewDescriptor.id);
+			if (view) {
+				this.viewHeaderContextMenuListeners.push(DOM.addDisposableListener(view.getHeaderElement(), DOM.EventType.CONTEXT_MENU, e => {
+					e.stopPropagation();
+					e.preventDefault();
+					if (viewDescriptor.canToggleVisibility) {
+						this.onContextMenu(new StandardMouseEvent(e), view);
+					}
+				}));
+			}
+		}
+
+		if (this.dimension) {
+			this.layoutViews();
+		}
+
 		return this.setVisible(this.isVisible());
 	}
 
-	private getViewDescriptorsFromRegistry(): IViewDescriptor[] {
+	private onContextMenu(event: StandardMouseEvent, view: IView): void {
+		event.stopPropagation();
+		event.preventDefault();
+
+		let anchor: { x: number, y: number } = { x: event.posx, y: event.posy };
+		this.contextMenuService.showContextMenu({
+			getAnchor: () => anchor,
+			getActions: () => TPromise.as([<IAction>{
+				id: `${view.id}.removeView`,
+				label: nls.localize('removeView', "Remove from Side Bar"),
+				enabled: true,
+				run: () => this.toggleViewVisibility(view.id)
+			}]),
+		});
+	}
+
+	private showHeaderInTitleArea(): boolean {
+		if (!this.showHeaderInTitleWhenSingleView) {
+			return false;
+		}
+		if (this.splitView.getViews<IView>().length > 1) {
+			return false;
+		}
+		if (ViewLocation.getContributedViewLocation(this.location.id) && !this.areExtensionsReady) {
+			// Checks in cache so that view do not jump. See #29609
+			return this.viewsStates.size === 1;
+		}
+		return true;
+	}
+
+	private getViewDescriptorsFromRegistry(defaultOrder: boolean = false): IViewDescriptor[] {
 		return ViewsRegistry.getViews(this.location)
 			.sort((a, b) => {
-				if (b.order === void 0 || b.order === null) {
+				const viewStateA = this.viewsStates.get(a.id);
+				const viewStateB = this.viewsStates.get(b.id);
+				const orderA = !defaultOrder && viewStateA ? viewStateA.order : a.order;
+				const orderB = !defaultOrder && viewStateB ? viewStateB.order : b.order;
+
+				if (orderB === void 0 || orderB === null) {
 					return -1;
 				}
-				if (a.order === void 0 || a.order === null) {
+				if (orderA === void 0 || orderA === null) {
 					return 1;
 				}
-				return a.order - b.order;
+
+				return orderA - orderB;
 			});
 	}
 
 	private saveViewsStates(): void {
 		const viewsStates = {};
+		const registeredViewDescriptors = this.getViewDescriptorsFromRegistry();
 		this.viewsStates.forEach((viewState, id) => {
 			const view = this.getView(id);
-			viewState = view ? this.createViewState(view) : viewState;
-			viewsStates[id] = { size: viewState.size, collapsed: viewState.collapsed };
+			if (view) {
+				viewState = this.createViewState(view);
+				viewsStates[id] = { size: viewState.size, collapsed: viewState.collapsed, isHidden: viewState.isHidden, order: viewState.order };
+			} else {
+				const viewDescriptor = registeredViewDescriptors.filter(v => v.id === id)[0];
+				if (viewDescriptor) {
+					viewsStates[id] = viewState;
+				}
+			}
 		});
 
 		this.storageService.store(this.viewletStateStorageId, JSON.stringify(viewsStates), this.contextService.hasWorkspace() ? StorageScope.WORKSPACE : StorageScope.GLOBAL);
@@ -538,8 +710,18 @@ export class ComposedViewsViewlet extends Viewlet {
 		return this.instantiationService.createInstance(viewDescriptor.ctor, options);
 	}
 
+	protected get views(): IView[] {
+		return this.splitView ? this.splitView.getViews<IView>() : [];
+	}
+
 	protected getView(id: string): IView {
-		return this.views.filter(view => view.id === id)[0];
+		return this.splitView.getViews<IView>().filter(view => view.id === id)[0];
+	}
+
+	private updateViewStateSize(view: IView): IViewState {
+		const currentState = this.viewsStates.get(view.id);
+		const newViewState = this.createViewState(view);
+		return currentState ? { ...currentState, collapsed: newViewState.collapsed, size: newViewState.size } : newViewState;
 	}
 
 	private createViewState(view: IView): IViewState {
@@ -547,7 +729,9 @@ export class ComposedViewsViewlet extends Viewlet {
 		const size = collapsed && view instanceof CollapsibleView ? view.previousSize : view.size;
 		return {
 			collapsed,
-			size: size && size > 0 ? size : void 0
+			size: size && size > 0 ? size : void 0,
+			isHidden: false,
+			order: this.splitView.getViews<IView>().indexOf(view)
 		};
 	}
 }

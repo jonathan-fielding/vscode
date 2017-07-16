@@ -14,8 +14,9 @@ import { TokenizationRegistry } from 'vs/editor/common/modes';
 import { IDisposable } from 'vs/base/common/lifecycle';
 import * as viewEvents from 'vs/editor/common/view/viewEvents';
 import { OverviewRulerZone } from 'vs/editor/common/view/overviewZoneManager';
-import { editorOverviewRulerBorder, editorCursor } from 'vs/editor/common/view/editorColorRegistry';
+import { editorOverviewRulerBorder, editorCursorForeground } from 'vs/editor/common/view/editorColorRegistry';
 import { Color } from 'vs/base/common/color';
+import { ThemeColor } from 'vs/platform/theme/common/themeService';
 
 export class DecorationsOverviewRuler extends ViewPart {
 
@@ -164,7 +165,7 @@ export class DecorationsOverviewRuler extends ViewPart {
 		let borderColor = this._context.theme.getColor(editorOverviewRulerBorder);
 		this._borderColor = borderColor ? borderColor.toString() : null;
 
-		let cursorColor = this._context.theme.getColor(editorCursor);
+		let cursorColor = this._context.theme.getColor(editorCursorForeground);
 		this._cursorColor = cursorColor ? cursorColor.transparent(0.7).toString() : null;
 
 		this._overviewRuler.setThemeType(this._context.theme.type, false);
@@ -191,7 +192,7 @@ export class DecorationsOverviewRuler extends ViewPart {
 		return zones;
 	}
 
-	private resolveRulerColor(color: string | editorCommon.ThemeColor): string {
+	private resolveRulerColor(color: string | ThemeColor): string {
 		if (editorCommon.isThemeColor(color)) {
 			let c = this._context.theme.getColor(color.id) || Color.transparent;
 			return c.toString();
