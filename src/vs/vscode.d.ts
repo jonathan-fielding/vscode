@@ -201,9 +201,13 @@ declare module 'vscode' {
 		 * Get a word-range at the given position. By default words are defined by
 		 * common separators, like space, -, _, etc. In addition, per languge custom
 		 * [word definitions](#LanguageConfiguration.wordPattern) can be defined. It
-		 * is also possible to provide a custom regular expression. *Note* that a
-		 * custom regular expression must not match the empty string and that it will
-		 * be ignored if it does.
+		 * is also possible to provide a custom regular expression.
+		 *
+		 * * *Note 1:* A custom regular expression must not match the empty string and
+		 * if it does, it will be ignored.
+		 * * *Note 2:* A custom regular expression will fail to match multiline strings
+		 * and in the name of speed regular expressions should not match words with
+		 * spaces. Use [`TextLine.text`](#TextLine.text) for more complex, non-wordy, scenarios.
 		 *
 		 * The position will be [adjusted](#TextDocument.validatePosition).
 		 *
@@ -743,6 +747,11 @@ declare module 'vscode' {
 		 * with the next editor or if it will be kept.
 		 */
 		preview?: boolean;
+
+		/**
+		 * An optional selection to apply for the document in the [editor](#TextEditor).
+		 */
+		selection?: Range;
 	}
 
 	/**
@@ -3538,6 +3547,326 @@ declare module 'vscode' {
 	}
 
 	/**
+	 * Controls the behaviour of the terminal's visibility.
+	 */
+	export enum TaskRevealKind {
+		/**
+		 * Always brings the terminal to front if the task is executed.
+		 */
+		Always = 1,
+
+		/**
+		 * Only brings the terminal to front if a problem is detected executing the task
+		 * (e.g. the task couldn't be started because).
+		 */
+		Silent = 2,
+
+		/**
+		 * The terminal never comes to front when the task is executed.
+		 */
+		Never = 3
+	}
+
+	/**
+	 * Controls how the task channel is used between tasks
+	 */
+	export enum TaskPanelKind {
+
+		/**
+		 * Shares a panel with other tasks. This is the default.
+		 */
+		Shared = 1,
+
+		/**
+		 * Uses a dedicated panel for this tasks. The panel is not
+		 * shared with other tasks.
+		 */
+		Dedicated = 2,
+
+		/**
+		 * Creates a new panel whenever this task is executed.
+		 */
+		New = 3
+	}
+
+	/**
+	 * Controls how the task is presented in the UI.
+	 */
+	export interface TaskPresentationOptions {
+		/**
+		 * Controls whether the task output is reveal in the user interface.
+		 * Defaults to `RevealKind.Always`.
+		 */
+		reveal?: TaskRevealKind;
+
+		/**
+		 * Controls whether the command associated with the task is echoed
+		 * in the user interface.
+		 */
+		echo?: boolean;
+
+		/**
+		 * Controls whether the panel showing the task output is taking focus.
+		 */
+		focus?: boolean;
+
+		/**
+		 * Controls if the task panel is used for this task only (dedicated),
+		 * shared between tasks (shared) or if a new panel is created on
+		 * every task execution (new). Defaults to `TaskInstanceKind.Shared`
+		 */
+		panel?: TaskPanelKind;
+	}
+
+	/**
+	 * A grouping for tasks. The editor by default supports the
+	 * 'Clean', 'Build', 'RebuildAll' and 'Test' group.
+	 */
+	export class TaskGroup {
+
+		/**
+		 * The clean task group;
+		 */
+		public static Clean: TaskGroup;
+
+		/**
+		 * The build task group;
+		 */
+		public static Build: TaskGroup;
+
+		/**
+		 * The rebuild all task group;
+		 */
+		public static Rebuild: TaskGroup;
+
+		/**
+		 * The test all task group;
+		 */
+		public static Test: TaskGroup;
+
+		private constructor(id: string, label: string);
+	}
+
+
+	/**
+	 * A structure that defines a task kind in the system.
+	 * The value must be JSON-stringifyable.
+	 */
+	export interface TaskDefinition {
+		/**
+		 * The task definition descibing the task provided by an extension.
+		 * Usually a task provider defines more properties to identify
+		 * a task. They need to be defined in the package.json of the
+		 * extension under the 'taskDefinitions' extension point. The npm
+		 * task definition for example looks like this
+		 * ```typescript
+		 * interface NpmTaskDefinition extends TaskDefinition {
+		 *     script: string;
+		 * }
+		 * ```
+		 */
+		readonly type: string;
+
+		/**
+		 * Additional attributes of a concrete task definition.
+		 */
+		[name: string]: any;
+	}
+
+	/**
+	 * Options for a process execution
+	 */
+	export interface ProcessExecutionOptions {
+		/**
+		 * The current working directory of the executed program or shell.
+		 * If omitted the tools current workspace root is used.
+		 */
+		cwd?: string;
+
+		/**
+		 * The additional environment of the executed program or shell. If omitted
+		 * the parent process' environment is used. If provided it is merged with
+		 * the parent process' environment.
+		 */
+		env?: { [key: string]: string };
+	}
+
+	/**
+	 * The execution of a task happens as a external process
+	 * without shell interaction.
+	 */
+	export class ProcessExecution {
+
+		/**
+		 * Creates a process execution.
+		 *
+		 * @param process The process to start.
+		 * @param options Optional options for the started process.
+		 */
+		constructor(process: string, options?: ProcessExecutionOptions);
+
+		/**
+		 * Creates a process execution.
+		 *
+		 * @param process The process to start.
+		 * @param args Arguments to be passed to the process.
+		 * @param options Optional options for the started process.
+		 */
+		constructor(process: string, args: string[], options?: ProcessExecutionOptions);
+
+		/**
+		 * The process to be executed.
+		 */
+		process: string;
+
+		/**
+		 * The arguments passed to the process. Defaults to an empty array.
+		 */
+		args: string[];
+
+		/**
+		 * The process options used when the process is executed.
+		 * Defaults to undefined.
+		 */
+		options?: ProcessExecutionOptions;
+	}
+
+	/**
+	 * Options for a shell execution
+	 */
+	export interface ShellExecutionOptions {
+		/**
+		 * The shell executable.
+		 */
+		executable?: string;
+
+		/**
+		 * The arguments to be passed to the shell executable used to run the task.
+		 */
+		shellArgs?: string[];
+
+		/**
+		 * The current working directory of the executed shell.
+		 * If omitted the tools current workspace root is used.
+		 */
+		cwd?: string;
+
+		/**
+		 * The additional environment of the executed shell. If omitted
+		 * the parent process' environment is used. If provided it is merged with
+		 * the parent process' environment.
+		 */
+		env?: { [key: string]: string };
+	}
+
+
+	export class ShellExecution {
+		/**
+		 * Creates a process execution.
+		 *
+		 * @param commandLine The command line to execute.
+		 * @param options Optional options for the started the shell.
+		 */
+		constructor(commandLine: string, options?: ShellExecutionOptions);
+
+		/**
+		 * The shell command line
+		 */
+		commandLine: string;
+
+		/**
+		 * The shell options used when the command line is executed in a shell.
+		 * Defaults to undefined.
+		 */
+		options?: ShellExecutionOptions;
+	}
+
+	/**
+	 * A task to execute
+	 */
+	export class Task {
+
+		/**
+		 * Creates a new task.
+		 *
+		 * @param definition The task definition as defined in the taskDefintions extension point.
+		 * @param name The task's name. Is presented in the user interface.
+		 * @param source The task's source (e.g. 'gulp', 'npm', ...). Is presented in the user interface.
+		 * @param execution The process or shell execution.
+		 * @param problemMatchers the names of problem matchers to use, like '$tsc'
+		 *  or '$eslint'. Problem matchers can be contributed by an extension using
+		 *  the `problemMatchers` extension point.
+		 */
+		constructor(taskDefinition: TaskDefinition, name: string, source: string, execution?: ProcessExecution | ShellExecution, problemMatchers?: string | string[]);
+
+		/**
+		 * The task's definition.
+		 */
+		definition: TaskDefinition;
+
+		/**
+		 * The task's name
+		 */
+		name: string;
+
+		/**
+		 * The task's execution engine
+		 */
+		execution: ProcessExecution | ShellExecution;
+
+		/**
+		 * Whether the task is a background task or not.
+		 */
+		isBackground: boolean;
+
+		/**
+		 * A human-readable string describing the source of this
+		 * shell task, e.g. 'gulp' or 'npm'.
+		 */
+		source: string;
+
+		/**
+		 * The task group this tasks belongs to. See TaskGroup
+		 * for a predefined set of available groups.
+		 * Defaults to undefined meaning that the task doesn't
+		 * belong to any special group.
+		 */
+		group?: TaskGroup;
+
+		/**
+		 * The presentation options. Defaults to an empty literal.
+		 */
+		presentationOptions: TaskPresentationOptions;
+
+		/**
+		 * The problem matchers attached to the task. Defaults to an empty
+		 * array.
+		 */
+		problemMatchers: string[];
+	}
+
+	/**
+	 * A task provider allows to add tasks to the task service.
+	 * A task provider is registerd via #workspace.registerTaskProvider.
+	 */
+	export interface TaskProvider {
+		/**
+		 * Provides tasks.
+		 * @param token A cancellation token.
+		 * @return an array of tasks
+		 */
+		provideTasks(token?: CancellationToken): ProviderResult<Task[]>;
+
+		/**
+		 * Resolves a task the has no execution set.
+		 * @param task The task to resolve.
+		 * @param token A cancellation token.
+		 * @return the resolved task
+		 */
+		resolveTask(task: Task, token?: CancellationToken): ProviderResult<Task>;
+	}
+
+	/**
 	 * Namespace describing the environment the editor runs in.
 	 */
 	export namespace env {
@@ -3957,14 +4286,14 @@ declare module 'vscode' {
 		export function setStatusBarMessage(text: string): Disposable;
 
 		/**
-		 * @deprecated This function **deprecated**. Use `withProgress` instead.
-		 *
 		 * ~~Show progress in the Source Control viewlet while running the given callback and while
 		 * its returned promise isn't resolve or rejected.~~
 		 *
 		 * @param task A callback returning a promise. Progress increments can be reported with
 		 * the provided [progress](#Progress)-object.
 		 * @return The thenable the task did rseturn.
+		 *
+		 * @deprecated Use `withProgress` instead.
 		 */
 		export function withScmProgress<R>(task: (progress: Progress<number>) => Thenable<R>): Thenable<R>;
 
@@ -4272,6 +4601,44 @@ declare module 'vscode' {
 	}
 
 	/**
+	 * An event describing a change to the set of [workspace folders](#workspace.workspaceFolders).
+	 */
+	export interface WorkspaceFoldersChangeEvent {
+		/**
+		 * Added workspace folders.
+		 */
+		readonly added: WorkspaceFolder[];
+
+		/**
+		 * Removed workspace folders.
+		 */
+		readonly removed: WorkspaceFolder[];
+	}
+
+	/**
+	 * A workspace folder is one of potentially many roots opened by the editor. All workspace folders
+	 * are equal which means there is notion of an active or master workspace folder.
+	 */
+	export interface WorkspaceFolder {
+
+		/**
+		 * The associated URI for this workspace folder.
+		 */
+		readonly uri: Uri;
+
+		/**
+		 * The name of this workspace folder. Defaults to
+		 * the basename its [uri-path](#Uri.path)
+		 */
+		readonly name: string;
+
+		/**
+		 * The ordinal number of this workspace folder.
+		 */
+		readonly index: number;
+	}
+
+	/**
 	 * Namespace for dealing with the current workspace. A workspace is the representation
 	 * of the folder that has been opened. There is no workspace when just a file but not a
 	 * folder has been opened.
@@ -4281,6 +4648,48 @@ declare module 'vscode' {
 	 * the editor-process so that they should be always used instead of nodejs-equivalents.
 	 */
 	export namespace workspace {
+
+		/**
+		 * ~~The folder that is open in the editor. `undefined` when no folder
+		 * has been opened.~~
+		 *
+		 * @readonly
+		 * @deprecated Use [`workspaceFolders`](#workspace.workspaceFolders) instead.
+		 */
+		export let rootPath: string | undefined;
+
+		/**
+		 * List of workspace folders or `undefined` when no folder is open, `undefined` when no
+		 * folder has been opened. *Note* that the first entry corresponds to the value of `rootPath`.
+		 *
+		 * @readonly
+		 */
+		export let workspaceFolders: WorkspaceFolder[] | undefined;
+
+		/**
+		 * An event that is emitted when a workspace folder is added or removed.
+		 */
+		export const onDidChangeWorkspaceFolders: Event<WorkspaceFoldersChangeEvent>;
+
+		/**
+		 * Returns a [workspace folder](#WorkspaceFolder) for the provided resource. When the resource
+		 * is a workspace folder itself, its parent workspace folder or `undefined` is returned.
+		 *
+		 * @param uri An uri.
+		 * @return A workspace folder or `undefined`
+		 */
+		export function getWorkspaceFolder(uri: Uri): WorkspaceFolder | undefined;
+
+		/**
+		 * Returns a path that is relative to the workspace root.
+		 *
+		 * When there are no [workspace folders](#workspace.workspaceFolders) or when the path
+		 * is not a child of them, the input is returned.
+		 *
+		 * @param pathOrUri A path or uri. When a uri is given its [fsPath](#Uri.fsPath) is used.
+		 * @return A path relative to the root or the input.
+		 */
+		export function asRelativePath(pathOrUri: string | Uri): string;
 
 		/**
 		 * Creates a file system watcher.
@@ -4297,25 +4706,6 @@ declare module 'vscode' {
 		 * @return A new file system watcher instance.
 		 */
 		export function createFileSystemWatcher(globPattern: string, ignoreCreateEvents?: boolean, ignoreChangeEvents?: boolean, ignoreDeleteEvents?: boolean): FileSystemWatcher;
-
-		/**
-		 * The folder that is open in the editor. `undefined` when no folder
-		 * has been opened.
-		 *
-		 * @readonly
-		 */
-		export let rootPath: string | undefined;
-
-		/**
-		 * Returns a path that is relative to the workspace root.
-		 *
-		 * When there is no [workspace root](#workspace.rootPath) or when the path
-		 * is not a child of that folder, the input is returned.
-		 *
-		 * @param pathOrUri A path or uri. When a uri is given its [fsPath](#Uri.fsPath) is used.
-		 * @return A path relative to the root or the input.
-		 */
-		export function asRelativePath(pathOrUri: string | Uri): string;
 
 		/**
 		 * Find files in the workspace.
@@ -4459,6 +4849,15 @@ declare module 'vscode' {
 		 * An event that is emitted when the [configuration](#WorkspaceConfiguration) changed.
 		 */
 		export const onDidChangeConfiguration: Event<void>;
+
+		/**
+		 * Register a task provider.
+		 *
+		 * @param type The task kind type this provider is registered for.
+		 * @param provider A task provider.
+		 * @return A [disposable](#Disposable) that unregisters this provider when being disposed.
+		 */
+		export function registerTaskProvider(type: string, provider: TaskProvider): Disposable;
 	}
 
 	/**
@@ -4986,6 +5385,113 @@ declare module 'vscode' {
 		 * @return An instance of [source control](#SourceControl).
 		 */
 		export function createSourceControl(id: string, label: string): SourceControl;
+	}
+
+	/**
+	 * Configuration for a debug session.
+	 */
+	export interface DebugConfiguration {
+		/**
+		 * The type for the debug session.
+		 */
+		type: string;
+
+		/**
+		 * An optional name for the debug session.
+		 */
+		name?: string;
+
+		/**
+		 * The request type of the debug session.
+		 */
+		request: string;
+
+		/**
+		 * Additional debug type specific properties.
+		 */
+		[key: string]: any;
+	}
+
+	/**
+	 * A debug session.
+	 */
+	export interface DebugSession {
+
+		/**
+		 * The unique ID of this debug session.
+		 */
+		readonly id: string;
+
+		/**
+		 * The debug session's type from the debug configuration.
+		 */
+		readonly type: string;
+
+		/**
+		 * The debug session's name from the debug configuration.
+		 */
+		readonly name: string;
+
+		/**
+		 * Send a custom request to the debug adapter.
+		 */
+		customRequest(command: string, args?: any): Thenable<any>;
+	}
+
+	/**
+	 * A custom Debug Adapter Protocol event received from a [debug session](#DebugSession).
+	 */
+	export interface DebugSessionCustomEvent {
+		/**
+		 * The [debug session](#DebugSession) for which the custom event was received.
+		 */
+		session: DebugSession;
+
+		/**
+		 * Type of event.
+		 */
+		event: string;
+
+		/**
+		 * Event specific information.
+		 */
+		body?: any;
+	}
+
+	/**
+	 * Namespace for dealing with debug sessions.
+	 */
+	export namespace debug {
+
+		/**
+		 * Create a new debug session based on the given configuration.
+		 * @param configuration
+		 */
+		export function createDebugSession(configuration: DebugConfiguration): Thenable<DebugSession>;
+
+		/**
+		 * The currently active debug session or `undefined`. The active debug session is the one
+		 * represented by the debug action floating window or the one currently shown in the drop down menu of the debug action floating window.
+		 * If no debug session is active, the value is `undefined`.
+		 */
+		export let activeDebugSession: DebugSession | undefined;
+
+		/**
+		 * An [event](#Event) which fires when the [active debug session](#debug.activeDebugSession)
+		 * has changed. *Note* that the event also fires when the active debug session changes
+		 * to `undefined`.
+		 */
+		export const onDidChangeActiveDebugSession: Event<DebugSession | undefined>;
+
+		/**
+		 * An [event](#Event) which fires when a custom DAP event is received from the debug session.
+		 */
+		export const onDidReceiveDebugSessionCustomEvent: Event<DebugSessionCustomEvent>;
+
+		/**
+		 * An [event](#Event) which fires when a debug session has terminated.
+		 */
+		export const onDidTerminateDebugSession: Event<DebugSession>;
 	}
 
 	/**

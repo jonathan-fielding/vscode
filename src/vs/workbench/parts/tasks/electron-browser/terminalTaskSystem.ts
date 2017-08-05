@@ -19,7 +19,6 @@ import { LinkedMap, Touch } from 'vs/base/common/map';
 import Severity from 'vs/base/common/severity';
 import { EventEmitter } from 'vs/base/common/eventEmitter';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
-import { TerminateResponse } from 'vs/base/common/processes';
 import * as TPath from 'vs/base/common/paths';
 // import URI from 'vs/base/common/uri';
 
@@ -34,24 +33,27 @@ import { IConfigurationResolverService } from 'vs/workbench/services/configurati
 import { ITerminalService, ITerminalInstance, IShellLaunchConfig } from 'vs/workbench/parts/terminal/common/terminal';
 import { IOutputService, IOutputChannel } from 'vs/workbench/parts/output/common/output';
 import { StartStopProblemCollector, WatchingProblemCollector, ProblemCollectorEvents } from 'vs/workbench/parts/tasks/common/problemCollectors';
-import { Task, RevealKind, CommandOptions, ShellConfiguration, CommandType, PanelKind } from 'vs/workbench/parts/tasks/common/tasks';
+import { Task, RevealKind, CommandOptions, ShellConfiguration, RuntimeType, PanelKind } from 'vs/workbench/parts/tasks/common/tasks';
 import {
 	ITaskSystem, ITaskSummary, ITaskExecuteResult, TaskExecuteKind, TaskError, TaskErrors, ITaskResolver,
-	TelemetryEvent, Triggers, TaskSystemEvents, TaskEvent, TaskType
+	TelemetryEvent, Triggers, TaskSystemEvents, TaskEvent, TaskType, TaskTerminateResponse
 } from 'vs/workbench/parts/tasks/common/taskSystem';
 
 class TerminalDecoder {
 	// See https://en.wikipedia.org/wiki/ANSI_escape_code & http://stackoverflow.com/questions/25189651/how-to-remove-ansi-control-chars-vt100-from-a-java-string &
 	// https://www.npmjs.com/package/strip-ansi
 	private static ANSI_CONTROL_SEQUENCE: RegExp = /\x1b[[()#;?]*(?:\d{1,4}(?:;\d{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+	private static OPERATING_SYSTEM_COMMAND_SEQUENCE: RegExp = /\x1b[\]](?:.*)(?:\x07|\x1b\\)/g;
 
 	private remaining: string;
 
 	public write(data: string): string[] {
 		let result: string[] = [];
+		data = data.replace(TerminalDecoder.ANSI_CONTROL_SEQUENCE, '');
+		data = data.replace(TerminalDecoder.OPERATING_SYSTEM_COMMAND_SEQUENCE, '');
 		let value = this.remaining
-			? this.remaining + data.replace(TerminalDecoder.ANSI_CONTROL_SEQUENCE, '')
-			: data.replace(TerminalDecoder.ANSI_CONTROL_SEQUENCE, '');
+			? this.remaining + data
+			: data;
 
 		if (value.length < 1) {
 			return result;
@@ -160,6 +162,17 @@ export class TerminalTaskSystem extends EventEmitter implements ITaskSystem {
 		}
 	}
 
+
+	public revealTask(task: Task): boolean {
+		let terminalData = this.activeTasks[task._id];
+		if (!terminalData) {
+			return false;
+		}
+		this.terminalService.setActiveInstance(terminalData.terminal);
+		this.terminalService.showPanel(task.command.presentation.focus);
+		return true;
+	}
+
 	public isActive(): TPromise<boolean> {
 		return TPromise.as(this.isActiveSync());
 	}
@@ -176,28 +189,50 @@ export class TerminalTaskSystem extends EventEmitter implements ITaskSystem {
 		return Object.keys(this.activeTasks).map(key => this.activeTasks[key].task);
 	}
 
-	public terminate(id: string): TPromise<TerminateResponse> {
-		let terminalData = this.activeTasks[id];
-		if (!terminalData) {
-			return TPromise.as<TerminateResponse>({ success: false });
+	public terminate(id: string): TPromise<TaskTerminateResponse> {
+		let activeTerminal = this.activeTasks[id];
+		if (!activeTerminal) {
+			return TPromise.as<TaskTerminateResponse>({ success: false, task: undefined });
 		};
-		return new TPromise<TerminateResponse>((resolve, reject) => {
-			let terminal = terminalData.terminal;
+		return new TPromise<TaskTerminateResponse>((resolve, reject) => {
+			let terminal = activeTerminal.terminal;
 			const onExit = terminal.onExit(() => {
-				onExit.dispose();
-				resolve({ success: true });
+				let task = activeTerminal.task;
+				try {
+					onExit.dispose();
+					let event: TaskEvent = { taskId: task._id, taskName: task.name, type: TaskType.SingleRun, group: task.group, __task: task };
+					this.emit(TaskSystemEvents.Terminated, event);
+				} catch (error) {
+					// Do nothing.
+				}
+				resolve({ success: true, task: task });
 			});
 			terminal.dispose();
 		});
 	}
 
-	public terminateAll(): TPromise<TerminateResponse> {
+	public terminateAll(): TPromise<TaskTerminateResponse[]> {
+		let promises: TPromise<TaskTerminateResponse>[] = [];
 		Object.keys(this.activeTasks).forEach((key) => {
-			let data = this.activeTasks[key];
-			data.terminal.dispose();
+			let terminalData = this.activeTasks[key];
+			let terminal = terminalData.terminal;
+			promises.push(new TPromise<TaskTerminateResponse>((resolve, reject) => {
+				const onExit = terminal.onExit(() => {
+					let task = terminalData.task;
+					try {
+						onExit.dispose();
+						let event: TaskEvent = { taskId: task._id, taskName: task.name, type: TaskType.SingleRun, group: task.group, __task: task };
+						this.emit(TaskSystemEvents.Terminated, event);
+					} catch (error) {
+						// Do nothing.
+					}
+					resolve({ success: true, task: terminalData.task });
+				});
+			}));
+			terminal.dispose();
 		});
 		this.activeTasks = Object.create(null);
-		return TPromise.as<TerminateResponse>({ success: true });
+		return TPromise.join<TaskTerminateResponse>(promises);
 	}
 
 	private executeTask(startedTasks: IStringDictionary<TPromise<ITaskSummary>>, task: Task, resolver: ITaskResolver, trigger: string): TPromise<ITaskSummary> {
@@ -246,7 +281,7 @@ export class TerminalTaskSystem extends EventEmitter implements ITaskSystem {
 				const problemMatchers = this.resolveMatchers(task.problemMatchers);
 				let watchingProblemMatcher = new WatchingProblemCollector(problemMatchers, this.markerService, this.modelService);
 				let toUnbind: IDisposable[] = [];
-				let event: TaskEvent = { taskId: task._id, taskName: task.name, type: TaskType.Watching };
+				let event: TaskEvent = { taskId: task._id, taskName: task.name, type: TaskType.Watching, group: task.group, __task: task };
 				let eventCounter: number = 0;
 				toUnbind.push(watchingProblemMatcher.addListener(ProblemCollectorEvents.WatchingBeginDetected, () => {
 					eventCounter++;
@@ -277,6 +312,7 @@ export class TerminalTaskSystem extends EventEmitter implements ITaskSystem {
 					onData.dispose();
 					onExit.dispose();
 					delete this.activeTasks[task._id];
+					this.emit(TaskSystemEvents.Changed);
 					switch (task.command.presentation.panel) {
 						case PanelKind.Dedicated:
 							this.sameTaskTerminals[task._id] = terminal.id.toString();
@@ -308,7 +344,7 @@ export class TerminalTaskSystem extends EventEmitter implements ITaskSystem {
 		} else {
 			promise = new TPromise<ITaskSummary>((resolve, reject) => {
 				[terminal, executedCommand] = this.createTerminal(task);
-				let event: TaskEvent = { taskId: task._id, taskName: task.name, type: TaskType.SingleRun };
+				let event: TaskEvent = { taskId: task._id, taskName: task.name, type: TaskType.SingleRun, group: task.group, __task: task };
 				this.emit(TaskSystemEvents.Active, event);
 				let decoder = new TerminalDecoder();
 				let problemMatchers = this.resolveMatchers(task.problemMatchers);
@@ -323,6 +359,7 @@ export class TerminalTaskSystem extends EventEmitter implements ITaskSystem {
 					onData.dispose();
 					onExit.dispose();
 					delete this.activeTasks[task._id];
+					this.emit(TaskSystemEvents.Changed);
 					switch (task.command.presentation.panel) {
 						case PanelKind.Dedicated:
 							this.sameTaskTerminals[task._id] = terminal.id.toString();
@@ -348,6 +385,7 @@ export class TerminalTaskSystem extends EventEmitter implements ITaskSystem {
 			this.terminalService.showPanel(task.command.presentation.focus);
 		}
 		this.activeTasks[task._id] = { terminal, task, promise };
+		this.emit(TaskSystemEvents.Changed);
 		return promise.then((summary) => {
 			try {
 				let telemetryEvent: TelemetryEvent = {
@@ -385,7 +423,7 @@ export class TerminalTaskSystem extends EventEmitter implements ITaskSystem {
 			waitOnExit = nls.localize('reuseTerminal', 'Terminal will be reused by tasks, press any key to close it.');
 		};
 		let shellLaunchConfig: IShellLaunchConfig = undefined;
-		let isShellCommand = task.command.type === CommandType.Shell;
+		let isShellCommand = task.command.runtime === RuntimeType.Shell;
 		if (isShellCommand) {
 			if (Platform.isWindows && ((options.cwd && TPath.isUNC(options.cwd)) || (!options.cwd && TPath.isUNC(process.cwd())))) {
 				throw new TaskError(Severity.Error, nls.localize('TerminalTaskSystem', 'Can\'t execute a shell command on an UNC drive.'), TaskErrors.UnknownError);
@@ -407,8 +445,9 @@ export class TerminalTaskSystem extends EventEmitter implements ITaskSystem {
 			let shellArgs = <string[]>shellLaunchConfig.args.slice(0);
 			let toAdd: string[] = [];
 			let commandLine = args && args.length > 0 ? `${command} ${args.join(' ')}` : `${command}`;
+			let basename: string;
 			if (Platform.isWindows) {
-				let basename = path.basename(shellLaunchConfig.executable).toLowerCase();
+				basename = path.basename(shellLaunchConfig.executable).toLowerCase();
 				if (basename === 'powershell.exe') {
 					if (!shellSpecified) {
 						toAdd.push('-Command');

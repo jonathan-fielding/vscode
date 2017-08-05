@@ -17,7 +17,7 @@ import { IHighlightEvent, ITree } from 'vs/base/parts/tree/browser/tree';
 import { Tree } from 'vs/base/parts/tree/browser/treeImpl';
 import { CollapsibleState, ViewSizing } from 'vs/base/browser/ui/splitview/splitview';
 import { CollapseAction } from 'vs/workbench/browser/viewlet';
-import { CollapsibleView, IViewletViewOptions } from 'vs/workbench/parts/views/browser/views';
+import { CollapsibleView, IViewletViewOptions, IViewOptions } from 'vs/workbench/parts/views/browser/views';
 import { IDebugService, State, IBreakpoint, IExpression, CONTEXT_BREAKPOINTS_FOCUSED, CONTEXT_WATCH_EXPRESSIONS_FOCUSED, CONTEXT_VARIABLES_FOCUSED } from 'vs/workbench/parts/debug/common/debug';
 import { Expression, Variable, ExceptionBreakpoint, FunctionBreakpoint, Thread, StackFrame, Breakpoint, ThreadAndProcessIds } from 'vs/workbench/parts/debug/common/debugModel';
 import * as viewer from 'vs/workbench/parts/debug/electron-browser/debugViewer';
@@ -50,7 +50,7 @@ export class VariablesView extends CollapsibleView {
 	private settings: any;
 
 	constructor(
-		options: IViewletViewOptions,
+		private options: IViewletViewOptions,
 		@IContextMenuService contextMenuService: IContextMenuService,
 		@ITelemetryService private telemetryService: ITelemetryService,
 		@IDebugService private debugService: IDebugService,
@@ -60,7 +60,7 @@ export class VariablesView extends CollapsibleView {
 		@IListService private listService: IListService,
 		@IThemeService private themeService: IThemeService
 	) {
-		super({ ...options, sizing: ViewSizing.Flexible, ariaHeaderLabel: nls.localize('variablesSection', "Variables Section") }, keybindingService, contextMenuService);
+		super({ ...(options as IViewOptions), sizing: ViewSizing.Flexible, ariaHeaderLabel: nls.localize('variablesSection', "Variables Section") }, keybindingService, contextMenuService);
 
 		this.settings = options.viewletSettings;
 		this.variablesFocusedContext = CONTEXT_VARIABLES_FOCUSED.bindTo(contextKeyService);
@@ -85,7 +85,7 @@ export class VariablesView extends CollapsibleView {
 
 	public renderHeader(container: HTMLElement): void {
 		const titleDiv = $('div.title').appendTo(container);
-		$('span').text(nls.localize('variables', "Variables")).appendTo(titleDiv);
+		$('span').text(this.options.name).appendTo(titleDiv);
 
 		super.renderHeader(container);
 	}
@@ -159,7 +159,7 @@ export class WatchExpressionsView extends CollapsibleView {
 	private settings: any;
 
 	constructor(
-		options: IViewletViewOptions,
+		private options: IViewletViewOptions,
 		@IContextMenuService contextMenuService: IContextMenuService,
 		@IDebugService private debugService: IDebugService,
 		@IKeybindingService keybindingService: IKeybindingService,
@@ -168,7 +168,7 @@ export class WatchExpressionsView extends CollapsibleView {
 		@IListService private listService: IListService,
 		@IThemeService private themeService: IThemeService
 	) {
-		super({ ...options, ariaHeaderLabel: nls.localize('expressionsSection', "Expressions Section"), sizing: ViewSizing.Flexible }, keybindingService, contextMenuService);
+		super({ ...(options as IViewOptions), ariaHeaderLabel: nls.localize('expressionsSection', "Expressions Section"), sizing: ViewSizing.Flexible }, keybindingService, contextMenuService);
 		this.settings = options.viewletSettings;
 
 		this.toDispose.push(this.debugService.getModel().onDidChangeWatchExpressions(we => {
@@ -188,7 +188,7 @@ export class WatchExpressionsView extends CollapsibleView {
 
 	public renderHeader(container: HTMLElement): void {
 		const titleDiv = $('div.title').appendTo(container);
-		$('span').text(nls.localize('watch', "Watch")).appendTo(titleDiv);
+		$('span').text(this.options.name).appendTo(titleDiv);
 
 		super.renderHeader(container);
 	}
@@ -258,7 +258,7 @@ export class CallStackView extends CollapsibleView {
 	private settings: any;
 
 	constructor(
-		options: IViewletViewOptions,
+		private options: IViewletViewOptions,
 		@IContextMenuService contextMenuService: IContextMenuService,
 		@ITelemetryService private telemetryService: ITelemetryService,
 		@IDebugService private debugService: IDebugService,
@@ -267,7 +267,7 @@ export class CallStackView extends CollapsibleView {
 		@IListService private listService: IListService,
 		@IThemeService private themeService: IThemeService
 	) {
-		super({ ...options, ariaHeaderLabel: nls.localize('callstackSection', "Call Stack Section"), sizing: ViewSizing.Flexible }, keybindingService, contextMenuService);
+		super({ ...(options as IViewOptions), ariaHeaderLabel: nls.localize('callstackSection', "Call Stack Section"), sizing: ViewSizing.Flexible }, keybindingService, contextMenuService);
 		this.settings = options.viewletSettings;
 
 		// Create scheduler to prevent unnecessary flashing of tree when reacting to changes
@@ -300,7 +300,7 @@ export class CallStackView extends CollapsibleView {
 
 	public renderHeader(container: HTMLElement): void {
 		const title = $('div.debug-call-stack-title').appendTo(container);
-		$('span.title').text(nls.localize('callStack', "Call Stack")).appendTo(title);
+		$('span.title').text(this.options.name).appendTo(title);
 		this.pauseMessage = $('span.pause-message').appendTo(title);
 		this.pauseMessage.hide();
 		this.pauseMessageLabel = $('span.label').appendTo(this.pauseMessage);
@@ -392,7 +392,7 @@ export class BreakpointsView extends CollapsibleView {
 	private settings: any;
 
 	constructor(
-		options: IViewletViewOptions,
+		private options: IViewletViewOptions,
 		@IContextMenuService contextMenuService: IContextMenuService,
 		@IDebugService private debugService: IDebugService,
 		@IKeybindingService keybindingService: IKeybindingService,
@@ -402,7 +402,7 @@ export class BreakpointsView extends CollapsibleView {
 		@IThemeService private themeService: IThemeService
 	) {
 		super({
-			...options,
+			...(options as IViewOptions),
 			ariaHeaderLabel: nls.localize('breakpointsSection', "Breakpoints Section"),
 			sizing: ViewSizing.Fixed, initialBodySize: BreakpointsView.getExpandedBodySize(
 				debugService.getModel().getBreakpoints().length + debugService.getModel().getFunctionBreakpoints().length + debugService.getModel().getExceptionBreakpoints().length)
@@ -415,7 +415,7 @@ export class BreakpointsView extends CollapsibleView {
 
 	public renderHeader(container: HTMLElement): void {
 		const titleDiv = $('div.title').appendTo(container);
-		$('span').text(nls.localize('breakpoints', "Breakpoints")).appendTo(titleDiv);
+		$('span').text(this.options.name).appendTo(titleDiv);
 
 		super.renderHeader(container);
 	}

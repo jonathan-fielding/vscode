@@ -10,7 +10,6 @@ import { resolveWorkbenchCommonProperties } from 'vs/platform/telemetry/node/wor
 import { StorageService, InMemoryLocalStorage } from 'vs/platform/storage/common/storageService';
 import { TestWorkspace } from 'vs/platform/workspace/test/common/testWorkspace';
 
-
 suite('Telemetry - common properties', function () {
 
 	const commit = void 0;
@@ -18,7 +17,7 @@ suite('Telemetry - common properties', function () {
 	let storageService;
 
 	setup(() => {
-		storageService = new StorageService(new InMemoryLocalStorage(), null, TestWorkspace);
+		storageService = new StorageService(new InMemoryLocalStorage(), null, TestWorkspace.id);
 	});
 
 	test('default', function () {

@@ -6,18 +6,23 @@
 'use strict';
 
 import { TPromise } from 'vs/base/common/winjs.base';
-import { OpenContext, IWindowConfiguration, ReadyState, IPath } from 'vs/platform/windows/common/windows';
+import { OpenContext, IWindowConfiguration, ReadyState } from 'vs/platform/windows/common/windows';
 import { ParsedArgs } from 'vs/platform/environment/common/environment';
 import Event from 'vs/base/common/event';
 import { ITelemetryData } from 'vs/platform/telemetry/common/telemetry';
-import { createDecorator } from "vs/platform/instantiation/common/instantiation";
-import { IProcessEnvironment } from "vs/base/common/platform";
+import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
+import { IProcessEnvironment } from 'vs/base/common/platform';
+import { IWorkspaceIdentifier } from "vs/platform/workspaces/common/workspaces";
 
 export interface ICodeWindow {
 	id: number;
 	win: Electron.BrowserWindow;
 	config: IWindowConfiguration;
-	openedWorkspacePath: string;
+
+	openedFolderPath: string;
+	openedWorkspace: IWorkspaceIdentifier;
+
+	lastFocusTime: number;
 
 	readyState: ReadyState;
 
@@ -42,19 +47,20 @@ export interface IWindowsMainService {
 	onWindowReady: Event<ICodeWindow>;
 	onWindowClose: Event<number>;
 	onWindowReload: Event<number>;
-	onPathsOpen: Event<IPath[]>;
 
 	// methods
 	ready(initialUserEnv: IProcessEnvironment): void;
 	reload(win: ICodeWindow, cli?: ParsedArgs): void;
+	closeWorkspace(win: ICodeWindow): void;
 	open(openConfig: IOpenConfiguration): ICodeWindow[];
 	openExtensionDevelopmentHostWindow(openConfig: IOpenConfiguration): void;
-	openFileFolderPicker(forceNewWindow?: boolean, data?: ITelemetryData): void;
-	openFilePicker(forceNewWindow?: boolean, path?: string, window?: ICodeWindow, data?: ITelemetryData): void;
-	openFolderPicker(forceNewWindow?: boolean, window?: ICodeWindow, data?: ITelemetryData): void;
+	pickFileFolderAndOpen(forceNewWindow?: boolean, data?: ITelemetryData): void;
+	pickFileAndOpen(forceNewWindow?: boolean, path?: string, window?: ICodeWindow, data?: ITelemetryData): void;
+	pickFolderAndOpen(forceNewWindow?: boolean, window?: ICodeWindow, data?: ITelemetryData): void;
+	pickFolder(window?: ICodeWindow, options?: { buttonLabel: string; title: string; }): TPromise<string[]>;
 	focusLastActive(cli: ParsedArgs, context: OpenContext): ICodeWindow;
 	getLastActiveWindow(): ICodeWindow;
-	findWindow(workspacePath: string, filePath?: string, extensionDevelopmentPath?: string): ICodeWindow;
+	waitForWindowClose(windowId: number): TPromise<void>;
 	openNewWindow(context: OpenContext): void;
 	sendToFocused(channel: string, ...args: any[]): void;
 	sendToAll(channel: string, payload: any, windowIdsToIgnore?: number[]): void;
@@ -74,7 +80,6 @@ export interface IOpenConfiguration {
 	forceNewWindow?: boolean;
 	forceReuseWindow?: boolean;
 	forceEmpty?: boolean;
-	windowToUse?: ICodeWindow;
 	diffMode?: boolean;
 	initialStartup?: boolean;
 }

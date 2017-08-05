@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import nls = require('vs/nls');
-import { registerColor, editorBackground, contrastBorder, transparent, badgeForeground, badgeBackground, lighten, darken } from 'vs/platform/theme/common/colorRegistry';
+import { registerColor, editorBackground, contrastBorder, transparent, lighten, darken } from 'vs/platform/theme/common/colorRegistry';
 import { IDisposable, Disposable, dispose } from 'vs/base/common/lifecycle';
 import { IThemeService, ITheme } from 'vs/platform/theme/common/themeService';
 import { Color } from 'vs/base/common/color';
@@ -163,6 +163,18 @@ export const STATUS_BAR_NO_FOLDER_BACKGROUND = registerColor('statusBar.noFolder
 	hc: null
 }, nls.localize('statusBarNoFolderBackground', "Status bar background color when no folder is opened. The status bar is shown in the bottom of the window."));
 
+export const STATUS_BAR_MULTI_FOLDER_BACKGROUND = registerColor('statusBar.multiFolderBackground', {
+	dark: '#2c4681',
+	light: '#2c4681',
+	hc: null
+}, nls.localize('statusBarMultiFolderBackground', "Status bar background color when a workspace with multiple folders is opened. The status bar is shown in the bottom of the window."));
+
+export const STATUS_BAR_MULTI_FOLDER_FOREGROUND = registerColor('statusBar.multiFolderForeground', {
+	dark: STATUS_BAR_FOREGROUND,
+	light: STATUS_BAR_FOREGROUND,
+	hc: STATUS_BAR_FOREGROUND
+}, nls.localize('statusBarMultiFolderForeground', "Status bar foreground color when a workspace with multiple folders is opened. The status bar is shown in the bottom of the window."));
+
 export const STATUS_BAR_NO_FOLDER_FOREGROUND = registerColor('statusBar.noFolderForeground', {
 	dark: STATUS_BAR_FOREGROUND,
 	light: STATUS_BAR_FOREGROUND,
@@ -222,15 +234,15 @@ export const ACTIVITY_BAR_DRAG_AND_DROP_BACKGROUND = registerColor('activityBar.
 }, nls.localize('activityBarDragAndDropBackground', "Drag and drop feedback color for the activity bar items. The color should have transparency so that the activity bar entries can still shine through. The activity bar is showing on the far left or right and allows to switch between views of the side bar."));
 
 export const ACTIVITY_BAR_BADGE_BACKGROUND = registerColor('activityBarBadge.background', {
-	dark: badgeBackground,
-	light: badgeBackground,
-	hc: badgeBackground
+	dark: '#007ACC',
+	light: '#007ACC',
+	hc: '#000000'
 }, nls.localize('activityBarBadgeBackground', "Activity notification badge background color. The activity bar is showing on the far left or right and allows to switch between views of the side bar."));
 
 export const ACTIVITY_BAR_BADGE_FOREGROUND = registerColor('activityBarBadge.foreground', {
-	dark: badgeForeground,
-	light: badgeForeground,
-	hc: badgeForeground
+	dark: Color.white,
+	light: Color.white,
+	hc: Color.white
 }, nls.localize('activityBarBadgeForeground', "Activity notification badge foreground color. The activity bar is showing on the far left or right and allows to switch between views of the side bar."));
 
 
@@ -260,6 +272,12 @@ export const SIDE_BAR_TITLE_FOREGROUND = registerColor('sideBarTitle.foreground'
 	light: SIDE_BAR_FOREGROUND,
 	hc: SIDE_BAR_FOREGROUND
 }, nls.localize('sideBarTitleForeground', "Side bar title foreground color. The side bar is the container for views like explorer and search."));
+
+export const SIDE_BAR_DRAG_AND_DROP_BACKGROUND = registerColor('sideBar.dropBackground', {
+	dark: Color.white.transparent(0.12),
+	light: Color.white.transparent(0.12),
+	hc: Color.white.transparent(0.12),
+}, nls.localize('sideBarDragAndDropBackground', "Drag and drop feedback color for the side bar sections. The color should have transparency so that the side bar sections can still shine through. The side bar is the container for views like explorer and search."));
 
 export const SIDE_BAR_SECTION_HEADER_BACKGROUND = registerColor('sideBarSectionHeader.background', {
 	dark: Color.fromHex('#808080').transparent(0.2),
@@ -300,6 +318,12 @@ export const TITLE_BAR_INACTIVE_BACKGROUND = registerColor('titleBar.inactiveBac
 	light: transparent(TITLE_BAR_ACTIVE_BACKGROUND, 0.6),
 	hc: null
 }, nls.localize('titleBarInactiveBackground', "Title bar background when the window is inactive. Note that this color is currently only supported on macOS."));
+
+export const TITLE_BAR_BORDER = registerColor('titleBar.border', {
+	dark: null,
+	light: null,
+	hc: null
+}, nls.localize('titleBarBorder', "Title bar border color. Note that this color is currently only supported on macOS."));
 
 // < --- Notifications --- >
 

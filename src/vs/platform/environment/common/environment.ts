@@ -11,6 +11,7 @@ export interface ParsedArgs {
 	help?: boolean;
 	version?: boolean;
 	wait?: boolean;
+	waitMarkerFilePath?: string;
 	diff?: boolean;
 	goto?: boolean;
 	'new-window'?: boolean;
@@ -61,6 +62,8 @@ export interface IEnvironmentService {
 
 	backupHome: string;
 	backupWorkspacesPath: string;
+
+	workspacesHome: string;
 
 	isExtensionDevelopment: boolean;
 	disableExtensions: boolean;

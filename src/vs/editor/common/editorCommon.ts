@@ -24,6 +24,7 @@ import {
 import * as editorOptions from 'vs/editor/common/config/editorOptions';
 import { ICursorPositionChangedEvent, ICursorSelectionChangedEvent } from 'vs/editor/common/controller/cursorEvents';
 import { ICursors, CursorConfiguration } from 'vs/editor/common/controller/cursorCommon';
+import { ThemeColor } from 'vs/platform/theme/common/themeService';
 
 /**
  * Vertical Lane in the overview ruler of the editor.
@@ -688,18 +689,17 @@ export interface ITextModel {
 	isDisposed(): boolean;
 
 	/**
-	 * No mode supports allowed on this model because it is simply too large.
-	 * (even tokenization would cause too much memory pressure)
-	 * @internal
-	 */
-	isTooLargeForHavingAMode(): boolean;
-
-	/**
 	 * Only basic mode supports allowed on this model because it is simply too large.
 	 * (tokenization is allowed and other basic supports)
 	 * @internal
 	 */
 	isTooLargeForHavingARichMode(): boolean;
+
+	/**
+	 * The file is so large, that even tokenization is disabled.
+	 * @internal
+	 */
+	isTooLargeForTokenization(): boolean;
 
 	/**
 	 * Search the model.
@@ -1620,10 +1620,6 @@ export interface IEditorContribution {
 	 * Restore view state.
 	 */
 	restoreViewState?(state: any): void;
-}
-
-export interface ThemeColor {
-	id: string;
 }
 
 /**
