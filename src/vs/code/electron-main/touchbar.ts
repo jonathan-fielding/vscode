@@ -6,16 +6,20 @@
 'use strict';
 
 import { TouchBar } from 'electron';
-const { TouchBarSegmentedControl, TouchBarButton, TouchBarSpacer } = TouchBar;
+const { TouchBarSegmentedControl, TouchBarButton, TouchBarSpacer, TouchBarGroup } = TouchBar;
 
 // shutup typescript
 declare var __dirname;
 
 export class CodeTouchbar {
+	private touchBar: TouchBar
+	private viewActions: TouchBarGroup
+	private viewSwitcher: TouchBarSegmentedControl
+
 	constructor(
 		private window
 	) {
-		this.setTouchbarState();
+		this.initializeTouchbarState();
 		this.window._win.webContents.on('ipc-message', this.listen.bind(this));
 	}
 
@@ -24,6 +28,7 @@ export class CodeTouchbar {
 
 		if (messageType === 'vscode:runAction') {
 			const action = command[2];
+			console.log('listened', command[2]);
 
 			if (action.includes('workbench.view')) {
 				this.setTouchbarState(action);
@@ -31,21 +36,45 @@ export class CodeTouchbar {
 		}
 	}
 
+	private initializeTouchbarState(currentView = 'workbench.view.explorer'): void {
+		const items = this.createButtons(currentView);
+
+		this.viewActions = new TouchBarGroup({ items });
+		this.viewSwitcher = this.createActionbarSwitcher(currentView);
+
+		this.touchBar = new TouchBar({
+			items: [
+				this.viewActions,
+				this.createSpacer(),
+				this.viewSwitcher,
+			]
+		});
+
+		this.window._win.setTouchBar(this.touchBar);
+	}
+
 	private setTouchbarState(currentView = 'workbench.view.explorer'): void {
-		const newBtn = this.createTouchbarButton('New File', 'workbench.action.files.newUntitledFile');
-		const saveBtn = this.createTouchbarButton('Save', 'workbench.action.files.save');
+		const views = [
+			'workbench.view.explorer',
+			'workbench.view.search',
+			'workbench.view.scm',
+			'workbench.view.debug',
+			'workbench.view.extensions',
+		];
 
-		const buttons = this.createButtons(currentView);
-		const actionbar = this.createActionbarSwitcher(currentView);
+		const items = this.createButtons(currentView);
+		this.viewActions.child = new TouchBar({ items });
+		this.viewSwitcher.selectedIndex = views.indexOf(currentView);
 
-		const touchBar = new TouchBar(buttons.concat([
-			this.createSpacer(),
-			actionbar
-		]));
+		this.touchBar = new TouchBar({
+			items: [
+				this.viewActions,
+				this.createSpacer(),
+				this.viewSwitcher,
+			]
+		});
 
-		const win = this.window._win;
-
-		win.setTouchBar(touchBar);
+		this.window._win.setTouchBar(this.touchBar);
 	}
 
 	private createTouchbarButton(label, action): TouchBarButton {
